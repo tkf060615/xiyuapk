@@ -1,0 +1,9 @@
+
+{
+  "appId": "com.energyup.app",
+  "appName": "EnergyUp",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}

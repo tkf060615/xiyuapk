@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { HashRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { Home as HomeIcon, BookOpen, Gamepad2, User, ChevronLeft, Flower2 } from 'lucide-react';
@@ -63,7 +64,8 @@ const DockItem = ({ icon: Icon, path, active }: { icon: any, path: string, activ
   );
 };
 
-const Layout = ({ children }: { children: React.ReactNode }) => {
+// Fix for line 113: Making children optional in the prop type definition to satisfy TypeScript's JSX requirements
+const Layout = ({ children }: { children?: React.ReactNode }) => {
   const location = useLocation();
   const isSubPage = location.pathname.includes('/game/') || location.pathname === '/settings' || location.pathname.includes('/journal/new');
 
