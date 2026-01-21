@@ -72,6 +72,25 @@ export const Meditation = () => {
     return () => clearInterval(interval);
   }, [isBreathingActive, breathPhase]);
 
+  // Determine styles based on phase
+  const getBreathingTransform = () => {
+    if (!isBreathingActive) return 'scale(1)';
+    switch (breathPhase) {
+      case 'Inhale': return 'scale(1.5)';
+      case 'Hold': return 'scale(1.5)';
+      case 'Exhale': return 'scale(1)';
+    }
+  };
+
+  const getBreathingDuration = () => {
+    if (!isBreathingActive) return '0.5s';
+    switch (breathPhase) {
+      case 'Inhale': return '4s';
+      case 'Hold': return '0s'; // Sustain size
+      case 'Exhale': return '8s';
+    }
+  };
+
   // --- Player Overlay (Strong Glass) ---
   if (activeTrack) {
     return (
@@ -148,29 +167,66 @@ export const Meditation = () => {
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-full pb-20">
-            <div className={`relative flex items-center justify-center transition-all duration-[1000ms] ${
-              breathPhase === 'Inhale' ? 'scale-125' : breathPhase === 'Exhale' ? 'scale-75' : 'scale-100'
-            }`}>
-               <div className="w-64 h-64 rounded-full bg-blue-100/30 dark:bg-blue-900/20 backdrop-blur-sm flex items-center justify-center shadow-[0_0_40px_rgba(59,130,246,0.2)]">
-                 <div className={`w-48 h-48 rounded-full bg-gradient-to-br from-blue-400 to-cyan-300 shadow-2xl flex items-center justify-center transition-all duration-[4000ms] ${isBreathingActive ? 'opacity-100' : 'opacity-80 scale-95 grayscale'}`}>
+            <div className="relative flex items-center justify-center h-96 w-full">
+               
+               {/* Outer Expanding Ring (Visual Breath) */}
+               <div 
+                 className="absolute rounded-full pointer-events-none blur-3xl"
+                 style={{
+                   width: '200px',
+                   height: '200px',
+                   background: `radial-gradient(circle, rgba(var(--primary-rgb), 0.4) 0%, transparent 70%)`,
+                   transform: getBreathingTransform(),
+                   transition: `transform ${getBreathingDuration()} ease-in-out`
+                 }}
+               />
+
+               {/* Middle Glass Container */}
+               <div className="w-64 h-64 rounded-full glass-panel flex items-center justify-center shadow-2xl z-10 relative border-2 border-white/30 dark:border-white/10">
+                 
+                 {/* Inner Colored Circle */}
+                 <div 
+                   className={`w-48 h-48 rounded-full shadow-2xl flex items-center justify-center transition-all`}
+                   style={{
+                     background: `linear-gradient(135deg, var(--primary-color), var(--secondary-color))`,
+                     boxShadow: `0 10px 30px -10px rgba(var(--primary-rgb), 0.5), inset 0 0 20px rgba(255,255,255,0.3)`,
+                     transform: isBreathingActive && breathPhase === 'Hold' ? 'scale(1.05)' : 'scale(1)',
+                     transition: 'transform 2s ease-in-out'
+                   }}
+                 >
                     <div className="text-center z-10 text-white drop-shadow-md">
                        <h2 className="text-3xl font-bold mb-1">
                          {isBreathingActive ? (breathPhase === 'Inhale' ? '吸气' : breathPhase === 'Hold' ? '屏气' : '呼气') : '准备'}
                        </h2>
-                       {isBreathingActive && <p className="text-2xl font-mono">{breathTimeLeft}s</p>}
+                       {isBreathingActive && <p className="text-2xl font-mono opacity-90">{breathTimeLeft}s</p>}
                     </div>
                  </div>
+
+                 {/* Ripple Effect Circles (Decorative) */}
+                 {isBreathingActive && (
+                    <>
+                      <div className="absolute inset-0 rounded-full border border-primary/20 animate-ping" style={{ animationDuration: '3s' }}></div>
+                      <div className="absolute inset-4 rounded-full border border-primary/30 animate-ping" style={{ animationDuration: '3s', animationDelay: '0.5s' }}></div>
+                    </>
+                 )}
                </div>
             </div>
 
             <button 
               onClick={() => { setIsBreathingActive(!isBreathingActive); setBreathPhase('Inhale'); setBreathTimeLeft(4); }}
-              className={`mt-12 px-10 py-3 rounded-full font-bold text-lg shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all ${
-                isBreathingActive ? 'bg-white text-gray-600' : 'bg-primary text-white'
+              className={`mt-12 px-10 py-3 rounded-full font-bold text-lg shadow-[0_10px_20px_-5px_rgba(0,0,0,0.1)] hover:shadow-xl hover:-translate-y-1 transition-all active:scale-95 ${
+                isBreathingActive 
+                  ? 'bg-white text-gray-600 border border-gray-100' 
+                  : 'text-white'
               }`}
+              style={!isBreathingActive ? { background: 'var(--primary-color)' } : {}}
             >
-              {isBreathingActive ? '停止' : '开始 4-7-8 呼吸'}
+              {isBreathingActive ? '停止练习' : '开始 4-7-8 呼吸'}
             </button>
+            
+            {!isBreathingActive && (
+              <p className="mt-4 text-sm text-gray-400 font-medium">吸气 4秒 - 屏气 7秒 - 呼气 8秒</p>
+            )}
           </div>
         )}
       </div>

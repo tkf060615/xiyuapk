@@ -7,6 +7,8 @@ interface AppContextType {
   updateUser: (data: Partial<UserProfile>) => void;
   journal: JournalEntry[];
   addJournalEntry: (entry: JournalEntry) => void;
+  updateJournalEntry: (entry: JournalEntry) => void;
+  deleteJournalEntry: (id: string) => void;
   favorites: number[]; // Quote IDs
   toggleFavorite: (id: number) => void;
   settings: AppSettings;
@@ -36,6 +38,12 @@ const DEFAULT_USER: UserProfile = {
   nextLevelExp: 100,
   unlockedAchievements: [],
   stats: DEFAULT_STATS
+};
+
+// Helper to convert hex to rgb string "r, g, b"
+const hexToRgb = (hex: string) => {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : '239, 68, 68';
 };
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -72,8 +80,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   
   useEffect(() => { 
     localStorage.setItem('app_settings', JSON.stringify(settings)); 
+    
+    // Update CSS Variables
     document.documentElement.style.setProperty('--primary-color', settings.themeColor);
     document.documentElement.style.setProperty('--secondary-color', settings.themeColor + '80');
+    // Critical: Update RGB variable for alpha shadows/glows
+    document.documentElement.style.setProperty('--primary-rgb', hexToRgb(settings.themeColor));
+
     const root = window.document.documentElement;
     if (settings.darkMode === 'dark' || (settings.darkMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
       root.classList.add('dark');
@@ -106,8 +119,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           ...prev, 
           stats: { ...prev.stats, loginStreak: newStreak, lastLoginDate: today } 
         };
-        // We also need to check achievements here, but doing it in render/effect loop is tricky.
-        // We will delegate to a separate effect or timeout.
         setTimeout(() => checkAchievements(updatedUser), 100); 
         return updatedUser;
       }
@@ -137,7 +148,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         newUnlocked.push(ach.id);
         addedExp += ach.xpReward;
         achievementUnlocked = true;
-        // In a real app, we'd queue a toast notification here
         console.log(`Unlocked: ${ach.title}`);
       }
     });
@@ -200,6 +210,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     incrementStat('totalJournalEntries');
   };
 
+  const updateJournalEntry = (entry: JournalEntry) => {
+    setJournal(prev => prev.map(item => item.id === entry.id ? entry : item));
+  };
+
+  const deleteJournalEntry = (id: string) => {
+    setJournal(prev => prev.filter(item => item.id !== id));
+  };
+
   const toggleFavorite = (id: number) => {
     let isAdding = false;
     setFavorites(prev => {
@@ -217,7 +235,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   return (
-    <AppContext.Provider value={{ user, updateUser, journal, addJournalEntry, favorites, toggleFavorite, settings, updateSettings, incrementStat }}>
+    <AppContext.Provider value={{ user, updateUser, journal, addJournalEntry, updateJournalEntry, deleteJournalEntry, favorites, toggleFavorite, settings, updateSettings, incrementStat }}>
       {children}
     </AppContext.Provider>
   );

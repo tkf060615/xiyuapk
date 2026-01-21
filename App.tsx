@@ -18,11 +18,14 @@ const DockItem = ({ icon: Icon, path, active }: { icon: any, path: string, activ
       className="group relative flex items-center justify-center w-12 h-full cursor-pointer touch-manipulation"
     >
       {/* Breathing Glow / Light Effect */}
-      <div className={`
-        absolute bottom-4 w-10 h-10 rounded-full blur-xl bg-primary/40
-        transition-all duration-700 ease-in-out pointer-events-none
-        ${active ? 'opacity-100 scale-150 animate-pulse' : 'opacity-0 scale-0'}
-      `} />
+      <div 
+        className={`
+          absolute bottom-4 w-10 h-10 rounded-full blur-xl
+          transition-all duration-700 ease-in-out pointer-events-none
+          ${active ? 'opacity-100 scale-150 animate-pulse' : 'opacity-0 scale-0'}
+        `}
+        style={{ backgroundColor: 'rgba(var(--primary-rgb), 0.4)' }}
+      />
 
       {/* Floating 3D Icon Container */}
       <div className={`
