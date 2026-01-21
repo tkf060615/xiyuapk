@@ -18,6 +18,7 @@ export interface JournalEntry {
 export interface UserStats {
   loginStreak: number;
   lastLoginDate: string;
+  totalCheckIns: number; // Added
   totalJournalEntries: number;
   totalQuotesLiked: number;
   totalGamesPlayed: number;

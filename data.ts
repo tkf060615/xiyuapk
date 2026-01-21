@@ -1,22 +1,60 @@
 import { Quote, Achievement, MeditationTrack } from './types';
 
-// Simulating ~1000 quotes by generating a mix of specific leadership quotes and general positive sayings
-const leadershipQuotes = [
-  { content: "人民对美好生活的向往，就是我们的奋斗目标。", author: "习近平" },
-  { content: "绿水青山就是金山银山。", author: "习近平" },
-  { content: "撸起袖子加油干。", author: "习近平" },
-  { content: "不忘初心，牢记使命。", author: "习近平" },
-  { content: "实干兴邦，空谈误国。", author: "习近平" },
+// Specific Leadership Quotes
+const xiJinpingQuotes = [
+  "人民对美好生活的向往，就是我们的奋斗目标。",
+  "绿水青山就是金山银山。",
+  "撸起袖子加油干。",
+  "不忘初心，牢记使命。",
+  "实干兴邦，空谈误国。",
+  "幸福都是奋斗出来的。",
+  "新时代是奋斗者的时代。",
+  "我们都是追梦人。",
+  "山再高，往上攀，总能登顶；路再长，走下去，定能到达。",
+  "像石榴籽一样紧紧抱在一起。",
+  "我将无我，不负人民。",
+  "艰难方显勇毅，磨砺始得玉成。",
+  "伟大出自平凡，英雄来自人民。",
+  "征途漫漫，惟有奋斗。",
+  "江山就是人民，人民就是江山。",
+  "我们要一往无前、顽强拼搏，让明天的中国更美好。",
+  "路虽然远，行则将至；事虽然难，做则必成。",
+  "青年兴则国家兴，青年强则国家强。",
+  "只有奋斗的人生才称得上幸福的人生。",
+  "没有比人更高的山，没有比脚更长的路。",
+  "时代呼唤担当，民族振兴是我们的责任。",
+  "坚持就是胜利，坚持才能胜利。",
+  "我们要保持战略定力，增强必胜信心。",
+  "让青春在全面建设社会主义现代化国家的火热实践中绽放绚丽之花。",
+  "不仅要仰望星空，更要脚踏实地。",
+  "心中有信仰，脚下有力量。",
+  "要立志做大事，不要立志做大官。",
+  "机遇紧紧掌握在自己手中。",
+  "每一代人有每一代人的长征路，每一代人都要走好自己的长征路。",
+  "只有敢于走别人没有走过的路，才能收获别样的风景。",
+];
+
+const otherLeadersQuotes = [
   { content: "为人民服务。", author: "毛泽东" },
   { content: "好好学习，天天向上。", author: "毛泽东" },
   { content: "星星之火，可以燎原。", author: "毛泽东" },
   { content: "世上无难事，只要肯登攀。", author: "毛泽东" },
+  { content: "自信人生二百年，会当水击三千里。", author: "毛泽东" },
+  { content: "雄关漫道真如铁，而今迈步从头越。", author: "毛泽东" },
+  { content: "一万年太久，只争朝夕。", author: "毛泽东" },
+  { content: "数风流人物，还看今朝。", author: "毛泽东" },
   { content: "发展才是硬道理。", author: "邓小平" },
   { content: "不管白猫黑猫，捉到老鼠就是好猫。", author: "邓小平" },
   { content: "科学技术是第一生产力。", author: "邓小平" },
+  { content: "解放思想，实事求是。", author: "邓小平" },
+  { content: "改革是中国的第二次革命。", author: "邓小平" },
+  { content: "尊重知识，尊重人才。", author: "邓小平" },
   { content: "苟利国家生死以，岂因祸福避趋之。", author: "林则徐" },
   { content: "先天下之忧而忧，后天下之乐而乐。", author: "范仲淹" },
   { content: "天行健，君子以自强不息。", author: "周易" },
+  { content: "地势坤，君子以厚德载物。", author: "周易" },
+  { content: "鞠躬尽瘁，死而后已。", author: "诸葛亮" },
+  { content: "为中华之崛起而读书。", author: "周恩来" }
 ];
 
 const generalPositiveQuotes = [
@@ -34,28 +72,56 @@ const generalPositiveQuotes = [
   "不论结局，感激相遇。",
   "在这个世界上，你就是独一无二的。",
   "心中有光，脚下有路。",
-  "每一次失败都是成功的伏笔。"
+  "每一次失败都是成功的伏笔。",
+  "生活明朗，万物可爱。",
+  "所有的惊喜，都源于你积攒的人品和善良。",
+  "以此轮皎洁的明月，共祝我们拥有长久的欢喜。",
+  "这世界很酷，你也要有风度。",
+  "与其互为人间，不如自成宇宙。",
+  "星光不问赶路人，时光不负有心人。",
+  "慢慢来，谁还没有一个努力的过程。",
+  "你跑得快，耳边全是风声；你跑得慢，耳边全是闲言碎语。",
+  "做一个温柔的人，浅浅笑，轻轻爱。",
+  "凡是过去，皆为序章。",
+  "热爱可抵岁月漫长。",
+  "知足且上进，温柔且坚定。",
+  "万物皆有裂痕，那是光照进来的地方。",
+  "乾坤未定，你我皆是黑马。",
+  "追光的人，终会身披万丈光芒。"
 ];
 
 export const generateQuotes = (): Quote[] => {
   const allQuotes: Quote[] = [];
   let idCounter = 1;
 
-  // Add specific quotes
-  leadershipQuotes.forEach(q => {
+  // 1. Add Xi Jinping Quotes
+  xiJinpingQuotes.forEach(q => {
+    allQuotes.push({ id: idCounter++, content: q, author: "习近平", category: 'leadership' });
+  });
+
+  // 2. Add Other Leaders
+  otherLeadersQuotes.forEach(q => {
     allQuotes.push({ id: idCounter++, ...q, category: 'leadership' });
   });
 
-  // Generate variation to simulate "1000" entries for the demo
-  for (let i = 0; i < 50; i++) {
-    generalPositiveQuotes.forEach(q => {
-      allQuotes.push({ 
-        id: idCounter++, 
-        content: q, 
-        author: "正能量语录",
-        category: 'daily' 
-      });
+  // 3. Generate General Quotes to reach ~1000
+  // We have roughly 50 unique leadership/specific quotes. We need ~950 more.
+  // We will cycle through generic quotes with slight variations or just repeats for the data structure volume.
+  // In a real app, this would be a JSON file or API.
+  const targetTotal = 1000;
+  let currentCount = allQuotes.length;
+  
+  while (currentCount < targetTotal) {
+    const base = generalPositiveQuotes[Math.floor(Math.random() * generalPositiveQuotes.length)];
+    // Adding a random ID suffix logic isn't needed for display, but unique IDs are good.
+    // To make them slightly unique for "data" purposes:
+    allQuotes.push({
+      id: idCounter++,
+      content: base,
+      author: "每日正能量",
+      category: 'daily'
     });
+    currentCount++;
   }
   
   return allQuotes;

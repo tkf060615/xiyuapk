@@ -15,6 +15,8 @@ interface AppContextType {
   updateSettings: (settings: Partial<AppSettings>) => void;
   // New actions
   incrementStat: (key: keyof UserStats, amount?: number) => void;
+  checkIn: () => void;
+  isCheckedInToday: boolean;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -22,6 +24,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const DEFAULT_STATS: UserStats = {
   loginStreak: 0,
   lastLoginDate: '',
+  totalCheckIns: 0,
   totalJournalEntries: 0,
   totalQuotesLiked: 0,
   totalGamesPlayed: 0,
@@ -53,6 +56,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     let loadedUser = saved ? JSON.parse(saved) : DEFAULT_USER;
     // Ensure stats structure exists if loading from old version
     if (!loadedUser.stats) loadedUser.stats = DEFAULT_STATS;
+    if (loadedUser.stats.totalCheckIns === undefined) loadedUser.stats.totalCheckIns = loadedUser.stats.loginStreak || 0;
     if (!loadedUser.nextLevelExp) loadedUser.nextLevelExp = 100 * loadedUser.level;
     if (!loadedUser.unlockedAchievements) loadedUser.unlockedAchievements = [];
     return loadedUser;
@@ -94,37 +98,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       root.classList.remove('dark');
     }
   }, [settings]);
-
-  // Login Streak Check on Mount
-  useEffect(() => {
-    const today = new Date().toLocaleDateString('zh-CN');
-    setUser(prev => {
-      const lastLogin = prev.stats.lastLoginDate;
-      let newStreak = prev.stats.loginStreak;
-
-      if (lastLogin !== today) {
-        // Calculate difference in days
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayStr = yesterday.toLocaleDateString('zh-CN');
-
-        if (lastLogin === yesterdayStr) {
-           newStreak += 1;
-        } else {
-           newStreak = 1; // Reset streak if missed a day, or first login
-        }
-        
-        // Return updated user with new streak
-        const updatedUser = { 
-          ...prev, 
-          stats: { ...prev.stats, loginStreak: newStreak, lastLoginDate: today } 
-        };
-        setTimeout(() => checkAchievements(updatedUser), 100); 
-        return updatedUser;
-      }
-      return prev;
-    });
-  }, []);
 
   // --- Logic Helpers ---
 
@@ -177,6 +150,40 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // --- Handlers ---
   const updateUser = (data: Partial<UserProfile>) => {
     setUser(prev => ({ ...prev, ...data }));
+  };
+
+  const checkIn = () => {
+    const today = new Date().toLocaleDateString('zh-CN');
+    if (user.stats.lastLoginDate === today) return;
+
+    setUser(prev => {
+      const lastCheckIn = prev.stats.lastLoginDate;
+      let newStreak = prev.stats.loginStreak;
+      let total = prev.stats.totalCheckIns || 0;
+
+      // Logic for streak
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toLocaleDateString('zh-CN');
+
+      if (lastCheckIn === yesterdayStr) {
+         newStreak += 1;
+      } else {
+         newStreak = 1; // Reset streak if missed a day, or first login
+      }
+      
+      const updatedUser = { 
+        ...prev, 
+        stats: { 
+          ...prev.stats, 
+          loginStreak: newStreak, 
+          totalCheckIns: total + 1,
+          lastLoginDate: today 
+        } 
+      };
+      setTimeout(() => checkAchievements(updatedUser), 100); 
+      return updatedUser;
+    });
   };
 
   const incrementStat = (key: keyof UserStats, amount = 1) => {
@@ -234,8 +241,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setSettings(prev => ({ ...prev, ...data }));
   };
 
+  const isCheckedInToday = user.stats.lastLoginDate === new Date().toLocaleDateString('zh-CN');
+
   return (
-    <AppContext.Provider value={{ user, updateUser, journal, addJournalEntry, updateJournalEntry, deleteJournalEntry, favorites, toggleFavorite, settings, updateSettings, incrementStat }}>
+    <AppContext.Provider value={{ user, updateUser, journal, addJournalEntry, updateJournalEntry, deleteJournalEntry, favorites, toggleFavorite, settings, updateSettings, incrementStat, checkIn, isCheckedInToday }}>
       {children}
     </AppContext.Provider>
   );

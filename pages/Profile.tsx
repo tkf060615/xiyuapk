@@ -1,11 +1,11 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context';
-import { Settings, Camera, Edit2, Medal, Lock, Zap, Book, Gamepad2, X, Save, User as UserIcon, Heart, Quote, Trash2 } from 'lucide-react';
+import { Settings, Camera, Edit2, Medal, Lock, Zap, Book, Gamepad2, X, Save, User as UserIcon, Heart, Quote, Trash2, Activity, Calendar, BarChart2 } from 'lucide-react';
 import { ACHIEVEMENTS, INITIAL_QUOTES } from '../data';
 
 export const Profile = () => {
-  const { user, updateUser, favorites, toggleFavorite } = useApp();
+  const { user, updateUser, favorites, toggleFavorite, journal } = useApp();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
@@ -14,6 +14,9 @@ export const Profile = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [activeTab, setActiveTab] = useState<'achievements' | 'favorites'>('achievements');
   
+  // Mood Chart State
+  const [chartRange, setChartRange] = useState<'week' | 'month' | 'year'>('week');
+
   const [editForm, setEditForm] = useState({
     nickname: '',
     bio: '',
@@ -62,6 +65,137 @@ export const Profile = () => {
   
   // Resolve favorite quotes
   const favoriteQuotes = INITIAL_QUOTES.filter(q => favorites.includes(q.id));
+
+  // --- MOOD CHART LOGIC ---
+  const chartData = useMemo(() => {
+    const now = new Date();
+    const dataPoints: { label: string, value: number, date: string }[] = [];
+    const count = chartRange === 'week' ? 7 : chartRange === 'month' ? 30 : 12;
+
+    // Helper to format date keys
+    const formatDateKey = (d: Date) => d.toLocaleDateString('zh-CN'); // YYYY/M/D
+    const formatMonthKey = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}`;
+
+    // 1. Prepare data structure based on range
+    for (let i = count - 1; i >= 0; i--) {
+      const d = new Date();
+      let label = '';
+      let key = '';
+
+      if (chartRange === 'year') {
+        d.setMonth(now.getMonth() - i);
+        label = `${d.getMonth() + 1}月`;
+        key = formatMonthKey(d);
+      } else {
+        d.setDate(now.getDate() - i);
+        label = chartRange === 'week' ? ['周日','周一','周二','周三','周四','周五','周六'][d.getDay()] : `${d.getDate()}日`;
+        key = formatDateKey(d);
+      }
+      
+      dataPoints.push({ label, value: 0, date: key });
+    }
+
+    // 2. Aggregate journal data
+    // Map data points by date key for easier lookup
+    const pointMap = new Map(); 
+    dataPoints.forEach((p, index) => pointMap.set(p.date, { ...p, index, sum: 0, count: 0 }));
+
+    journal.forEach(entry => {
+      const entryDate = new Date(entry.timestamp);
+      let key = '';
+      if (chartRange === 'year') {
+        key = formatMonthKey(entryDate);
+      } else {
+        key = formatDateKey(entryDate);
+      }
+
+      if (pointMap.has(key)) {
+        const p = pointMap.get(key);
+        p.sum += entry.mood;
+        p.count += 1;
+      }
+    });
+
+    // 3. Calculate averages
+    return dataPoints.map(p => {
+        const mapData = pointMap.get(p.date);
+        return {
+            label: p.label,
+            value: mapData.count > 0 ? Math.round(mapData.sum / mapData.count) : 0
+        };
+    });
+  }, [journal, chartRange]);
+
+  // --- SVG Chart Render Helper ---
+  const renderChart = () => {
+    if (!chartData || chartData.length === 0) return null;
+
+    const width = 1000;
+    const height = 300;
+    const padding = 20;
+    const availableWidth = width - padding * 2;
+    const availableHeight = height - padding * 2;
+
+    // Calculate Coordinates
+    const points = chartData.map((d, i) => {
+        const x = padding + (i / (chartData.length - 1)) * availableWidth;
+        const y = padding + availableHeight - (d.value / 100) * availableHeight;
+        return { x, y, value: d.value, label: d.label };
+    });
+
+    // Construct Path
+    const pathD = points.map((p, i) => (i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`)).join(' ');
+    
+    // Area Path (for gradient fill)
+    const areaD = `${pathD} L ${points[points.length-1].x} ${height} L ${points[0].x} ${height} Z`;
+
+    return (
+        <svg viewBox={`0 0 ${width} ${height + 30}`} className="w-full h-full">
+            <defs>
+                <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--primary-color)" stopOpacity="0.4" />
+                    <stop offset="100%" stopColor="var(--primary-color)" stopOpacity="0" />
+                </linearGradient>
+            </defs>
+
+            {/* Horizontal Grid Lines (0, 50, 100) */}
+            <line x1={padding} y1={padding + availableHeight} x2={width - padding} y2={padding + availableHeight} stroke="gray" strokeOpacity="0.1" strokeDasharray="5,5" />
+            <line x1={padding} y1={padding + availableHeight/2} x2={width - padding} y2={padding + availableHeight/2} stroke="gray" strokeOpacity="0.1" strokeDasharray="5,5" />
+            <line x1={padding} y1={padding} x2={width - padding} y2={padding} stroke="gray" strokeOpacity="0.1" strokeDasharray="5,5" />
+
+            {/* Fill Area */}
+            <path d={areaD} fill="url(#chartGradient)" />
+
+            {/* Line */}
+            <path d={pathD} fill="none" stroke="var(--primary-color)" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
+
+            {/* Data Points and Labels */}
+            {points.map((p, i) => (
+                <g key={i}>
+                    {/* Only show dots if value > 0 */}
+                    {p.value > 0 && (
+                        <circle cx={p.x} cy={p.y} r="8" fill="white" stroke="var(--primary-color)" strokeWidth="4" />
+                    )}
+                    
+                    {/* X-Axis Labels: Show all for Week, fewer for Month */}
+                    {(chartRange === 'week' || chartRange === 'year' || i % 5 === 0 || i === points.length - 1) && (
+                        <text 
+                            x={p.x} 
+                            y={height + 25} 
+                            textAnchor="middle" 
+                            fill="gray" 
+                            fontSize="24" 
+                            fontWeight="bold"
+                            style={{ opacity: 0.7 }}
+                        >
+                            {p.label}
+                        </text>
+                    )}
+                </g>
+            ))}
+        </svg>
+    );
+  };
 
   return (
     <div className="min-h-full pb-10">
@@ -133,7 +267,7 @@ export const Profile = () => {
              <div className="flex-1 glass-card p-3 rounded-2xl flex flex-col items-center">
                 <Zap size={18} className="text-yellow-500 mb-1" />
                 <span className="text-lg font-bold text-gray-800 dark:text-white">{user.stats.loginStreak}</span>
-                <span className="text-[10px] text-gray-400 font-bold uppercase">连续登录</span>
+                <span className="text-[10px] text-gray-400 font-bold uppercase">连续打卡</span>
              </div>
              <div className="flex-1 glass-card p-3 rounded-2xl flex flex-col items-center">
                 <Book size={18} className="text-blue-500 mb-1" />
@@ -147,6 +281,43 @@ export const Profile = () => {
              </div>
           </div>
         </div>
+      </div>
+
+      {/* --- MOOD CHART SECTION --- */}
+      <div className="px-6 mt-6 animate-fade-in" style={{ animationDelay: '100ms' }}>
+         <div className="glass-panel rounded-[2rem] p-5">
+            <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center gap-2 text-gray-800 dark:text-white font-bold">
+                    <Activity size={20} className="text-primary" />
+                    <span>心情曲线</span>
+                </div>
+                <div className="flex bg-gray-100 dark:bg-gray-700/50 p-1 rounded-lg">
+                    {(['week', 'month', 'year'] as const).map((r) => (
+                        <button
+                            key={r}
+                            onClick={() => setChartRange(r)}
+                            className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${
+                                chartRange === r 
+                                ? 'bg-white text-primary shadow-sm' 
+                                : 'text-gray-400 hover:text-gray-500'
+                            }`}
+                        >
+                            {r === 'week' ? '周' : r === 'month' ? '月' : '年'}
+                        </button>
+                    ))}
+                </div>
+            </div>
+            
+            <div className="w-full h-40">
+                {renderChart()}
+            </div>
+            
+            <div className="flex justify-between mt-2 text-[10px] text-gray-400 font-medium px-1">
+                <span>0</span>
+                <span>50</span>
+                <span>100</span>
+            </div>
+         </div>
       </div>
 
       {/* Tabs */}

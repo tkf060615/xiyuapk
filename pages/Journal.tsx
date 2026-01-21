@@ -1,24 +1,28 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context';
 import { JournalEntry } from '../types';
-import { Plus, Smile, Camera, X, Trash2, Edit2, Calendar, MapPin, Loader2, ImageIcon, Navigation } from 'lucide-react';
+import { Plus, Smile, Camera, X, Trash2, Edit2, Calendar, MapPin, Loader2, ImageIcon, Navigation, Share2, Sparkles } from 'lucide-react';
+import html2canvas from 'html2canvas';
 
 export const Journal = () => {
-  const { journal, addJournalEntry, updateJournalEntry, deleteJournalEntry } = useApp();
+  const { journal, addJournalEntry, updateJournalEntry, deleteJournalEntry, user } = useApp();
   const [isWriting, setIsWriting] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null);
   
-  // Form State (used for both Create and Edit)
+  // Form State
   const [content, setContent] = useState('');
   const [mood, setMood] = useState(50);
   const [image, setImage] = useState<string | null>(null);
   const [location, setLocation] = useState<string | null>(null);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null); // If set, we are editing this ID
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Sharing State
+  const [isSharing, setIsSharing] = useState(false);
+  const shareJournalRef = useRef<HTMLDivElement>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Initialize form when opening write mode or editing
   useEffect(() => {
     if (editingId && selectedEntry) {
       setContent(selectedEntry.content);
@@ -51,19 +55,16 @@ export const Journal = () => {
       async (position) => {
         const { latitude, longitude } = position.coords;
         try {
-           // Try simple reverse geocoding via OpenStreetMap (Free, no key required for basic usage)
            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10`);
            if (res.ok) {
              const data = await res.json();
              const addr = data.address;
-             // Construct a readable location string
              const locStr = addr.city || addr.town || addr.district || addr.village || addr.county || `${latitude.toFixed(2)}, ${longitude.toFixed(2)}`;
              setLocation(locStr);
            } else {
              setLocation(`${latitude.toFixed(2)}, ${longitude.toFixed(2)}`);
            }
         } catch(e) {
-           // Fallback to coordinates
            setLocation(`${latitude.toFixed(2)}, ${longitude.toFixed(2)}`);
         }
         setIsGettingLocation(false);
@@ -85,7 +86,6 @@ export const Journal = () => {
     if (!content.trim()) return;
     
     if (editingId && selectedEntry) {
-      // Update existing
       const updatedEntry: JournalEntry = {
         ...selectedEntry,
         content,
@@ -94,11 +94,10 @@ export const Journal = () => {
         location: location || undefined,
       };
       updateJournalEntry(updatedEntry);
-      setSelectedEntry(updatedEntry); // Update view
+      setSelectedEntry(updatedEntry);
       setEditingId(null);
       setIsWriting(false);
     } else {
-      // Create new
       const newEntry: JournalEntry = {
         id: Date.now().toString(),
         content,
@@ -118,6 +117,59 @@ export const Journal = () => {
     if (selectedEntry && window.confirm("确定要删除这篇日记吗？")) {
       deleteJournalEntry(selectedEntry.id);
       setSelectedEntry(null);
+    }
+  };
+
+  const handleShare = async () => {
+    if (!shareJournalRef.current || isSharing) return;
+    setIsSharing(true);
+
+    try {
+      const canvas = await html2canvas(shareJournalRef.current, {
+        useCORS: true,
+        backgroundColor: '#f8f9fa',
+        scale: 2,
+        width: 375,
+        windowWidth: 375,
+        onclone: (doc) => {
+            const el = doc.getElementById('share-card-journal');
+            if(el) el.style.display = 'flex';
+        }
+      });
+
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+            alert("生成分享图片失败");
+            setIsSharing(false);
+            return;
+        }
+
+        const file = new File([blob], "energy_journal.png", { type: "image/png" });
+
+        if (navigator.share && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: '我的日记分享',
+              text: '来自 EnergyUp 的生活记录',
+            });
+          } catch (e) {
+             console.log("分享取消");
+          }
+        } else {
+           const link = document.createElement('a');
+           link.href = URL.createObjectURL(blob);
+           link.download = 'energy_journal.png';
+           link.click();
+           alert("已保存图片到相册");
+        }
+        setIsSharing(false);
+      }, 'image/png');
+
+    } catch (e) {
+      console.error(e);
+      alert("分享失败");
+      setIsSharing(false);
     }
   };
 
@@ -220,6 +272,13 @@ export const Journal = () => {
            </button>
            <div className="flex gap-2">
               <button 
+                onClick={handleShare}
+                disabled={isSharing}
+                className="p-2 rounded-full text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-900/20 transition-colors"
+              >
+                 {isSharing ? <Loader2 size={20} className="animate-spin" /> : <Share2 size={20} />}
+              </button>
+              <button 
                 onClick={() => { setEditingId(selectedEntry.id); setIsWriting(true); }}
                 className="p-2 rounded-full text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
               >
@@ -270,6 +329,72 @@ export const Journal = () => {
              </p>
            </div>
         </div>
+
+        {/* 
+          Simplified Journal Share Card 
+          - Clean Background
+          - Proper Spacing
+          - Clear Typography
+        */}
+        <div 
+          ref={shareJournalRef}
+          id="share-card-journal"
+          style={{ position: 'fixed', left: '-9999px', top: 0, width: '375px', minHeight: '500px' }}
+          className="bg-[#f8f9fa] flex flex-col font-sans box-border"
+        >
+           {/* Top Bar Decoration */}
+           <div className="h-1.5 w-full bg-primary mb-6"></div>
+
+           <div className="px-6 pb-8 flex-1 flex flex-col">
+               {/* User Info */}
+               <div className="flex items-center gap-3 mb-6 w-full">
+                    <div className="w-10 h-10 rounded-full overflow-hidden border border-gray-200 shrink-0">
+                        <img src={user.avatar} crossOrigin="anonymous" alt="User" className="w-full h-full object-cover" />
+                    </div>
+                    <div className="flex flex-col">
+                        <h3 className="font-bold text-gray-800 text-sm leading-tight">{user.nickname}</h3>
+                        <div className="flex items-center gap-2 text-xs text-gray-400">
+                          <span>{selectedEntry.dateStr}</span>
+                          <span>•</span>
+                          <span>{new Date(selectedEntry.timestamp).toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'})}</span>
+                        </div>
+                    </div>
+                    <div className="ml-auto">
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold border ${selectedEntry.mood > 80 ? 'bg-green-50 text-green-600 border-green-200' : selectedEntry.mood > 40 ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                           {selectedEntry.mood > 80 ? '开心' : selectedEntry.mood > 40 ? '平静' : '低落'}
+                        </span>
+                    </div>
+               </div>
+
+               {/* Image */}
+               {selectedEntry.image && (
+                    <div className="w-full h-56 rounded-xl overflow-hidden mb-6 shadow-sm border border-gray-100">
+                        <img src={selectedEntry.image} crossOrigin="anonymous" className="w-full h-full object-cover" alt="Diary" />
+                    </div>
+               )}
+
+               {/* Content */}
+               <div className="mb-8">
+                   <p className="text-gray-700 leading-relaxed font-serif whitespace-pre-wrap text-justify text-base">
+                     {selectedEntry.content}
+                   </p>
+                   {selectedEntry.location && (
+                       <div className="mt-4 flex items-center gap-1.5 text-xs text-gray-400 font-medium">
+                           <MapPin size={12} /> {selectedEntry.location}
+                       </div>
+                   )}
+               </div>
+
+               {/* Footer */}
+               <div className="mt-auto pt-6 border-t border-gray-200 flex justify-center items-center gap-2 opacity-70">
+                   <div className="bg-gray-200 p-1 rounded">
+                     <Sparkles size={12} className="text-gray-500" />
+                   </div>
+                   <span className="text-xs font-bold text-gray-400 tracking-widest uppercase">EnergyUp Journal</span>
+               </div>
+           </div>
+        </div>
+
       </div>
     );
   }
