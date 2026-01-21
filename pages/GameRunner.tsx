@@ -2,10 +2,9 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { GameType } from '../types';
 import { useApp } from '../context';
-import { ChevronLeft, RefreshCw, Flag, AlertTriangle, Skull, Trophy, Play, Pause, Activity, Hash, Grid3X3, Bomb, Save, HelpCircle, Volume2, VolumeX, X } from 'lucide-react';
+import { ChevronLeft, RefreshCw, Flag, AlertTriangle, Skull, Trophy, Play, Pause, Activity, Hash, Grid3X3, Bomb, HelpCircle, Volume2, VolumeX, X, Rocket, Sparkles, RotateCcw, Frown, Music, CircleDashed } from 'lucide-react';
 
-// --- SOUND ENGINE (Synthesizer) ---
-// Using Web Audio API to generate retro 8-bit sounds without external assets
+// --- SOUND ENGINE ---
 const SoundSynthesizer = {
   ctx: null as AudioContext | null,
   enabled: true,
@@ -19,7 +18,7 @@ const SoundSynthesizer = {
     }
   },
 
-  play(type: 'move' | 'select' | 'win' | 'lose' | 'score' | 'merge' | 'bomb' | 'jump') {
+  play(type: 'move' | 'select' | 'win' | 'lose' | 'score' | 'merge' | 'bomb' | 'jump' | 'special' | 'wood' | 'pop') {
     if (!this.enabled) return;
     this.init();
     if (!this.ctx) return;
@@ -32,7 +31,7 @@ const SoundSynthesizer = {
     const now = this.ctx.currentTime;
 
     switch (type) {
-      case 'move': // Short blip
+      case 'move': 
         osc.type = 'triangle';
         osc.frequency.setValueAtTime(300, now);
         osc.frequency.exponentialRampToValueAtTime(50, now + 0.1);
@@ -41,7 +40,7 @@ const SoundSynthesizer = {
         osc.start(now);
         osc.stop(now + 0.1);
         break;
-      case 'select': // High blip
+      case 'select': 
         osc.type = 'sine';
         osc.frequency.setValueAtTime(600, now);
         gain.gain.setValueAtTime(0.1, now);
@@ -49,7 +48,7 @@ const SoundSynthesizer = {
         osc.start(now);
         osc.stop(now + 0.1);
         break;
-      case 'score': // Coin sound
+      case 'score': 
         osc.type = 'square';
         osc.frequency.setValueAtTime(1000, now);
         osc.frequency.setValueAtTime(2000, now + 0.1);
@@ -59,7 +58,7 @@ const SoundSynthesizer = {
         osc.start(now);
         osc.stop(now + 0.3);
         break;
-      case 'merge': // 2048 merge / Match3 pop
+      case 'merge': 
         osc.type = 'sine';
         osc.frequency.setValueAtTime(400, now);
         osc.frequency.linearRampToValueAtTime(800, now + 0.1);
@@ -68,7 +67,7 @@ const SoundSynthesizer = {
         osc.start(now);
         osc.stop(now + 0.2);
         break;
-      case 'jump': // Parkour jump
+      case 'jump': 
         osc.type = 'square';
         osc.frequency.setValueAtTime(150, now);
         osc.frequency.linearRampToValueAtTime(400, now + 0.1);
@@ -77,8 +76,7 @@ const SoundSynthesizer = {
         osc.start(now);
         osc.stop(now + 0.15);
         break;
-      case 'bomb': // Explosion noise
-        // Noise buffer is complex, simulate with low square wave
+      case 'bomb': 
         osc.type = 'sawtooth';
         osc.frequency.setValueAtTime(100, now);
         osc.frequency.exponentialRampToValueAtTime(10, now + 0.3);
@@ -87,18 +85,46 @@ const SoundSynthesizer = {
         osc.start(now);
         osc.stop(now + 0.3);
         break;
-      case 'win': // Fanfare
+      case 'special': 
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(200, now);
+        osc.frequency.linearRampToValueAtTime(800, now + 0.2);
+        osc.frequency.linearRampToValueAtTime(1200, now + 0.4);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.5);
+        osc.start(now);
+        osc.stop(now + 0.5);
+        break;
+      case 'wood': // Wooden Fish Sound
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, now);
+        osc.frequency.exponentialRampToValueAtTime(400, now + 0.08);
+        gain.gain.setValueAtTime(0.5, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+        osc.start(now);
+        osc.stop(now + 0.15);
+        break;
+      case 'pop': // Bubble Pop Sound
         osc.type = 'triangle';
-        osc.frequency.setValueAtTime(523.25, now); // C5
-        osc.frequency.setValueAtTime(659.25, now + 0.1); // E5
-        osc.frequency.setValueAtTime(783.99, now + 0.2); // G5
-        osc.frequency.setValueAtTime(1046.50, now + 0.3); // C6
+        osc.frequency.setValueAtTime(1200, now);
+        osc.frequency.exponentialRampToValueAtTime(100, now + 0.05);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+        osc.start(now);
+        osc.stop(now + 0.05);
+        break;
+      case 'win': 
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(523.25, now); 
+        osc.frequency.setValueAtTime(659.25, now + 0.1); 
+        osc.frequency.setValueAtTime(783.99, now + 0.2); 
+        osc.frequency.setValueAtTime(1046.50, now + 0.3); 
         gain.gain.setValueAtTime(0.1, now);
         gain.gain.linearRampToValueAtTime(0, now + 0.6);
         osc.start(now);
         osc.stop(now + 0.6);
         break;
-      case 'lose': // Sad slide
+      case 'lose': 
         osc.type = 'sawtooth';
         osc.frequency.setValueAtTime(400, now);
         osc.frequency.linearRampToValueAtTime(100, now + 0.4);
@@ -119,11 +145,11 @@ const GAME_TUTORIALS: Record<string, { title: string, content: string }> = {
   },
   [GameType.G2048]: {
     title: '2048玩法',
-    content: '滑动屏幕将所有方块向一个方向移动。两个相同数字的方块碰撞时会合并成一个两倍数值的方块（例如 2+2=4）。目标是合成出 2048 方块！'
+    content: '滑动屏幕将所有方块向一个方向移动。两个相同数字的方块碰撞时会合并成一个两倍数值的方块（例如 2+2=4）。目标是合成出 2048 方块！当所有格子填满且无法合并时游戏结束。'
   },
   [GameType.MINESWEEPER]: {
     title: '扫雷玩法',
-    content: '点击方块“挖开”区域。如果挖到雷（💣），游戏结束。方块上的数字表示周围8格内有多少颗雷。使用“插旗”模式标记你认为有雷的地方。'
+    content: '点击方块“挖开”区域。长按方块可以“插旗”标记地雷。如果挖到雷（💣），游戏结束。方块上的数字表示周围8格内有多少颗雷。'
   },
   [GameType.GOMOKU]: {
     title: '五子棋玩法',
@@ -135,18 +161,45 @@ const GAME_TUTORIALS: Record<string, { title: string, content: string }> = {
   },
   [GameType.MATCH3]: {
     title: '消消乐玩法',
-    content: '点击两个相邻的水果进行交换。如果交换后横向或纵向有3个或以上相同的水果连成一线，它们就会消除并得分。达成连击可以获得更多分数！'
+    content: '点击选中水果，再次点击相邻水果交换。凑齐3个消除。4个消除生成【火箭】，可消除整行或整列；T/L型消除生成【炸弹】，消除周围区域；5个消除生成【彩虹】，与任意水果交换可消除同类水果！若无步可走则判负。'
+  },
+  [GameType.WOODEN_FISH]: {
+    title: '电子木鱼玩法',
+    content: '点击屏幕上的木鱼，积攒赛博功德。每次点击都会伴随清脆的敲击声和震动反馈，帮助你平心静气。'
+  },
+  [GameType.BUBBLE_WRAP]: {
+    title: '捏泡泡玩法',
+    content: '点击泡泡即可“捏破”它，享受解压的音效和触感。点击重置按钮可以恢复所有泡泡，无限畅玩。'
   }
 };
 
 // --- UTILS ---
 const useGameStats = (type: string) => {
   const { incrementStat } = useApp();
-  const recordPlay = () => incrementStat('totalGamesPlayed');
+  
+  const recordPlay = (score?: number) => {
+    incrementStat('totalGamesPlayed');
+    
+    // Update local detailed records
+    try {
+        const records = JSON.parse(localStorage.getItem('game_records') || '{}');
+        const gameRec = records[type] || { played: 0, maxScore: 0 };
+        
+        gameRec.played += 1;
+        if (score !== undefined) {
+            gameRec.maxScore = Math.max(gameRec.maxScore, score);
+        }
+        
+        records[type] = gameRec;
+        localStorage.setItem('game_records', JSON.stringify(records));
+    } catch(e) {
+        console.error("Failed to save game stats", e);
+    }
+  };
+
   return { recordPlay };
 };
 
-// Generic Hook for Persistence
 function usePersistentState<T>(key: string, initialValue: T) {
   const [state, setState] = useState<T>(() => {
     try {
@@ -173,7 +226,7 @@ const useSwipe = (onSwipe: (dir: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT') => void) => {
 
   const onTouchStart = (e: React.TouchEvent) => {
     touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-    SoundSynthesizer.init(); // Initialize audio context on first user interaction
+    SoundSynthesizer.init(); 
   };
 
   const onTouchEnd = (e: React.TouchEvent) => {
@@ -197,7 +250,6 @@ const useSwipe = (onSwipe: (dir: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT') => void) => {
 };
 
 // --- MINESWEEPER ---
-// ... (Types kept same as before)
 type Cell = {
   row: number;
   col: number;
@@ -227,6 +279,7 @@ const MinesweeperGame = () => {
     difficulty: 'easy'
   });
   const [mode, setMode] = useState<'dig' | 'flag'>('dig'); 
+  const longPressTimer = useRef<any>(null);
 
   useEffect(() => { if (state.grid.length === 0) initGame(state.difficulty); }, []);
 
@@ -266,25 +319,65 @@ const MinesweeperGame = () => {
     SoundSynthesizer.play('move');
   }, [setState]);
 
+  const toggleFlag = (r: number, c: number) => {
+    const cell = state.grid[r][c];
+    if (cell.isRevealed) return;
+
+    // Use immutable update pattern to correctly update state
+    const newGrid = state.grid.map((row, rowIndex) => 
+      rowIndex === r 
+        ? row.map((cell, colIndex) => colIndex === c ? { ...cell, isFlagged: !cell.isFlagged } : cell)
+        : row
+    );
+
+    const wasFlagged = cell.isFlagged;
+    
+    setState(prev => ({ 
+      ...prev, 
+      grid: newGrid, 
+      // If it was flagged, we are unflagging (+1 mine left). If unflagged, we flag (-1 mine left).
+      minesLeft: wasFlagged ? prev.minesLeft + 1 : prev.minesLeft - 1 
+    }));
+    
+    SoundSynthesizer.play('select');
+    if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(50);
+  };
+
+  const handleInteractionStart = (r: number, c: number) => {
+    if (state.gameState !== 'playing') return;
+    longPressTimer.current = setTimeout(() => {
+        toggleFlag(r, c);
+        longPressTimer.current = null; // Mark as handled
+    }, 400); // 400ms long press
+  };
+
+  const handleInteractionEnd = (r: number, c: number, isTouch: boolean) => {
+    if (longPressTimer.current) {
+        clearTimeout(longPressTimer.current);
+        longPressTimer.current = null;
+        // If timer was still running, it means it's a short tap -> Reveal
+        handleCellClick(r, c);
+    }
+  };
+
   const handleCellClick = (r: number, c: number) => {
     if (state.gameState !== 'playing') return;
     const cell = state.grid[r][c];
 
     if (mode === 'flag') {
-      if (cell.isRevealed) return;
-      const newGrid = [...state.grid];
-      newGrid[r][c].isFlagged = !cell.isFlagged;
-      setState({ ...state, grid: newGrid, minesLeft: cell.isFlagged ? state.minesLeft + 1 : state.minesLeft - 1 });
-      SoundSynthesizer.play('select');
+      toggleFlag(r, c);
       return;
     }
     if (cell.isFlagged || cell.isRevealed) return;
 
     if (cell.isMine) {
+      // Reveal mines visually
       const newGrid = state.grid.map(row => row.map(cell => ({ ...cell, isRevealed: cell.isMine ? true : cell.isRevealed })));
       setState({ ...state, grid: newGrid, gameState: 'lost' });
       SoundSynthesizer.play('bomb');
       SoundSynthesizer.play('lose');
+      recordPlay(0); // Record game play on loss
+      if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(200);
     } else {
       revealCells(r, c);
       SoundSynthesizer.play('move');
@@ -315,7 +408,7 @@ const MinesweeperGame = () => {
     const hasWon = revealedCount === (config.rows * config.cols - config.mines);
     
     if (hasWon) {
-      recordPlay();
+      recordPlay(config.rows * config.cols); // Use total cells as score for win
       SoundSynthesizer.play('win');
     }
     setState({ ...state, grid: newGrid, gameState: hasWon ? 'won' : 'playing' });
@@ -326,46 +419,74 @@ const MinesweeperGame = () => {
 
   return (
     <div className="flex flex-col items-center w-full max-w-md mx-auto h-full justify-center">
-      <div className="w-full glass-panel p-4 rounded-xl shadow-lg mb-4">
+      <div className="w-full glass-panel p-4 rounded-xl shadow-lg mb-6">
         <div className="flex justify-between mb-4">
           <div className="flex gap-2">
             {(['easy', 'medium', 'hard'] as const).map(d => (
-              <button key={d} onClick={() => initGame(d)} className={`px-3 py-1 rounded text-xs font-bold capitalize transition-colors ${state.difficulty === d ? 'bg-primary text-white shadow-md' : 'bg-gray-100 dark:bg-gray-700 text-gray-500'}`}>{d}</button>
+              <button key={d} onClick={() => initGame(d)} className={`px-3 py-1 rounded-lg text-xs font-bold capitalize transition-all active:scale-95 ${state.difficulty === d ? 'bg-primary text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-700 text-gray-500'}`}>{d}</button>
             ))}
           </div>
-          <button onClick={() => initGame(state.difficulty)}><RefreshCw size={18} className="text-gray-500 hover:text-primary transition-colors" /></button>
+          <button onClick={() => initGame(state.difficulty)} className="active:rotate-180 transition-transform duration-300"><RefreshCw size={18} className="text-gray-500 hover:text-primary" /></button>
         </div>
         <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 font-mono text-xl font-bold text-red-500"><AlertTriangle size={20} /> {state.minesLeft}</div>
+            <div className="flex items-center gap-2 font-mono text-xl font-bold text-red-500 bg-red-50 dark:bg-red-900/20 px-3 py-1 rounded-lg"><AlertTriangle size={18} /> {state.minesLeft}</div>
             <div className="flex bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
-               <button onClick={() => setMode('dig')} className={`px-4 py-1 rounded-md text-sm font-bold transition-all ${mode === 'dig' ? 'bg-white dark:bg-gray-600 shadow text-primary' : 'text-gray-400'}`}>挖开</button>
-               <button onClick={() => setMode('flag')} className={`px-4 py-1 rounded-md text-sm font-bold transition-all ${mode === 'flag' ? 'bg-white dark:bg-gray-600 shadow text-red-500' : 'text-gray-400'}`}>插旗</button>
+               <button onClick={() => setMode('dig')} className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all ${mode === 'dig' ? 'bg-white dark:bg-gray-600 shadow-sm text-primary' : 'text-gray-400'}`}>挖开</button>
+               <button onClick={() => setMode('flag')} className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all ${mode === 'flag' ? 'bg-white dark:bg-gray-600 shadow-sm text-red-500' : 'text-gray-400'}`}>插旗</button>
             </div>
         </div>
       </div>
       
-      <div className="relative w-full aspect-square max-w-[360px]">
-        <div className="absolute inset-0 bg-white/40 dark:bg-gray-800/40 p-2 rounded-xl backdrop-blur-sm select-none touch-none shadow-inner grid gap-[2px]" 
-           style={{ gridTemplateColumns: `repeat(${currentConfig.cols}, 1fr)`, gridTemplateRows: `repeat(${currentConfig.rows}, 1fr)` }}>
+      <div className="relative p-2 glass-panel rounded-2xl shadow-2xl w-full max-w-[360px]">
+        {/* Force Aspect Ratio Square */}
+        <div className="grid gap-[2px] select-none touch-none mx-auto w-full aspect-square" 
+           style={{ 
+             gridTemplateColumns: `repeat(${currentConfig.cols}, 1fr)`, 
+             gridTemplateRows: `repeat(${currentConfig.rows}, 1fr)` 
+           }}>
           {state.grid.map((row, r) => row.map((cell, c) => (
-            <div key={`${r}-${c}`} onClick={() => handleCellClick(r, c)} 
-              className={`w-full h-full flex items-center justify-center font-bold text-sm cursor-pointer rounded-sm shadow-sm transition-transform active:scale-95
-                ${cell.isRevealed ? (cell.isMine ? 'bg-red-500' : 'bg-white/60 dark:bg-gray-800') : 'bg-blue-300 dark:bg-blue-800 hover:opacity-90'}`}>
+            <div key={`${r}-${c}`} 
+              onMouseDown={() => handleInteractionStart(r, c)}
+              onMouseUp={() => handleInteractionEnd(r, c, false)}
+              onMouseLeave={() => { if(longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; } }}
+              onTouchStart={() => handleInteractionStart(r, c)}
+              onTouchEnd={(e) => { e.preventDefault(); handleInteractionEnd(r, c, true); }}
+              className={`w-full h-full flex items-center justify-center font-bold text-sm cursor-pointer rounded-[2px] transition-all duration-100
+                ${cell.isRevealed 
+                   ? (cell.isMine 
+                        ? 'bg-red-500 shadow-none' 
+                        : 'bg-gray-100 dark:bg-white/5 shadow-inner border border-black/5 dark:border-white/5') 
+                   : 'bg-blue-400 dark:bg-slate-600 shadow-[inset_-2px_-2px_0_rgba(0,0,0,0.2),inset_2px_2px_0_rgba(255,255,255,0.3)] active:bg-blue-500 active:shadow-none'}
+              `}
+            >
               {cell.isRevealed 
-                ? (cell.isMine ? <Skull size="60%" className="text-white"/> : (cell.neighborCount > 0 ? <span style={{fontSize: '70%'}} className={['text-gray-500', 'text-blue-500', 'text-green-500', 'text-red-500', 'text-purple-500'][cell.neighborCount] || 'text-purple-500'}>{cell.neighborCount}</span> : '')) 
-                : (cell.isFlagged ? <Flag size="60%" className="text-red-600 fill-red-600" /> : '')}
+                ? (cell.isMine 
+                    ? <Skull size="60%" className="text-white animate-pulse"/> 
+                    : (cell.neighborCount > 0 
+                        ? <span style={{fontSize: '90%'}} className={['text-gray-500', 'text-blue-600', 'text-green-600', 'text-red-600', 'text-purple-700', 'text-orange-700'][cell.neighborCount]}>{cell.neighborCount}</span> 
+                        : '')) 
+                : (cell.isFlagged 
+                    ? <Flag size="50%" className="text-red-600 fill-red-600 drop-shadow-sm animate-bounce-in" /> 
+                    : '')}
             </div>
           )))}
         </div>
+        
         {state.gameState !== 'playing' && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/20 backdrop-blur-[2px] rounded-xl">
-             <div className="glass-panel p-6 rounded-2xl shadow-2xl flex flex-col items-center animate-bounce-in">
-                <h3 className={`text-2xl font-bold mb-4 ${state.gameState === 'won' ? 'text-green-500' : 'text-red-500'}`}>{state.gameState === 'won' ? '恭喜获胜！' : '游戏结束'}</h3>
-                <button onClick={() => initGame(state.difficulty)} className="px-8 py-3 bg-primary text-white rounded-full font-bold shadow-lg">再来一局</button>
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/10 backdrop-blur-[3px] rounded-2xl">
+             <div className="bg-white/90 dark:bg-gray-800/90 p-8 rounded-3xl shadow-2xl flex flex-col items-center animate-fade-in border border-white/20">
+                <div className={`text-5xl mb-4 ${state.gameState === 'won' ? 'animate-bounce' : 'animate-pulse'}`}>
+                    {state.gameState === 'won' ? '🏆' : '💥'}
+                </div>
+                <h3 className={`text-2xl font-bold mb-6 ${state.gameState === 'won' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                    {state.gameState === 'won' ? '恭喜获胜！' : '游戏结束'}
+                </h3>
+                <button onClick={() => initGame(state.difficulty)} className="px-8 py-3 bg-primary text-white rounded-full font-bold shadow-lg shadow-primary/30 hover:scale-105 transition-transform active:scale-95">再来一局</button>
              </div>
           </div>
         )}
       </div>
+      <p className="mt-4 text-xs text-gray-400 font-medium">长按方块可快速插旗</p>
     </div>
   );
 };
@@ -377,6 +498,7 @@ const GomokuGame = () => {
   const SIZE = 13; 
   const [state, setState] = usePersistentState<GomokuState>('game_mem_gomoku', { board: Array(SIZE * SIZE).fill(0), player: 1, winner: 0, difficulty: 'normal' });
 
+  // Improved Win Check
   const checkWin = (b: number[], p: number) => {
     const dirs = [[1, 0], [0, 1], [1, 1], [1, -1]];
     for (let r = 0; r < SIZE; r++) {
@@ -402,23 +524,96 @@ const GomokuGame = () => {
     }
   }, [state.player, state.winner]);
 
+  // --- HEURISTIC AI ---
+  const evaluateMove = (board: number[], move: number, player: number) => {
+    let score = 0;
+    const r = Math.floor(move / SIZE);
+    const c = move % SIZE;
+    const dirs = [[1, 0], [0, 1], [1, 1], [1, -1]];
+
+    const centerDist = Math.abs(r - 6) + Math.abs(c - 6);
+    score += (12 - centerDist);
+
+    for (const [dr, dc] of dirs) {
+      let count = 1;
+      let blocked = 0;
+      
+      for (let k = 1; k < 5; k++) {
+        const nr = r + dr * k, nc = c + dc * k;
+        if (nr < 0 || nr >= SIZE || nc < 0 || nc >= SIZE) { blocked++; break; }
+        const val = board[nr * SIZE + nc];
+        if (val === player) count++;
+        else if (val !== 0) { blocked++; break; }
+        else break; 
+      }
+      
+      for (let k = 1; k < 5; k++) {
+        const nr = r - dr * k, nc = c - dc * k;
+        if (nr < 0 || nr >= SIZE || nc < 0 || nc >= SIZE) { blocked++; break; }
+        const val = board[nr * SIZE + nc];
+        if (val === player) count++;
+        else if (val !== 0) { blocked++; break; }
+        else break; 
+      }
+
+      if (count >= 5) score += 100000;
+      else if (count === 4 && blocked === 0) score += 10000; // Open 4
+      else if (count === 4 && blocked === 1) score += 1000;  // Closed 4
+      else if (count === 3 && blocked === 0) score += 1000;  // Open 3
+      else if (count === 3 && blocked === 1) score += 100;
+      else if (count === 2 && blocked === 0) score += 50;
+    }
+    return score;
+  };
+
   const makeAiMove = () => {
     const available = state.board.map((v, i) => v === 0 ? i : -1).filter(i => i !== -1);
     if (available.length === 0) return;
-    let bestMove = available[Math.floor(Math.random() * available.length)];
-    if (state.difficulty !== 'easy') {
+
+    let bestMove = available[0];
+    let maxScore = -1;
+
+    if (state.difficulty === 'easy') {
+       if (Math.random() > 0.5) {
+         bestMove = available[Math.floor(Math.random() * available.length)];
+       } else {
+         for (const move of available) {
+             const temp = [...state.board];
+             temp[move] = 1; 
+             if (checkWin(temp, 1)) { bestMove = move; break; }
+         }
+       }
+    } else {
        for (const move of available) {
-         const temp = [...state.board];
-         temp[move] = 2; if (checkWin(temp, 2)) { bestMove = move; break; } 
-         temp[move] = 1; if (checkWin(temp, 1)) { bestMove = move; break; }
+           const attackScore = evaluateMove(state.board, move, 2);
+           const defenseScore = evaluateMove(state.board, move, 1);
+           
+           let totalScore = attackScore + defenseScore;
+           
+           if (state.difficulty === 'hard') {
+               if (attackScore < 90000 && defenseScore > 500) {
+                   totalScore = attackScore + (defenseScore * 1.1);
+               }
+           }
+           if (state.difficulty === 'normal') totalScore += Math.random() * 10;
+           
+           if (totalScore > maxScore) {
+               maxScore = totalScore;
+               bestMove = move;
+           }
        }
     }
+
     const newBoard = [...state.board];
     newBoard[bestMove] = 2;
     const hasWon = checkWin(newBoard, 2);
     
     setState({ ...state, board: newBoard, player: 1, winner: hasWon ? 2 : 0 });
     SoundSynthesizer.play(hasWon ? 'lose' : 'move');
+    if (hasWon) {
+        // AI wins
+        recordPlay(0); // Record game played (score 0 for loss)
+    }
   };
 
   const handleUserClick = (i: number) => {
@@ -429,7 +624,7 @@ const GomokuGame = () => {
     SoundSynthesizer.play('select');
     
     const hasWon = checkWin(newBoard, 1);
-    if (hasWon) { recordPlay(); SoundSynthesizer.play('win'); }
+    if (hasWon) { recordPlay(1); SoundSynthesizer.play('win'); } // Win, score 1
     
     setState({ ...state, board: newBoard, player: hasWon ? 1 : 2, winner: hasWon ? 1 : 0 });
   };
@@ -469,7 +664,7 @@ const GomokuGame = () => {
 
 // --- SNAKE ---
 type SnakeState = { snake: {x:number, y:number}[]; food: {x:number, y:number}; score: number; highScore: number; gameOver: boolean; paused: boolean; };
-const SnakeGame = ({ onGameOver }: { onGameOver: () => void }) => {
+const SnakeGame = ({ onGameOver }: { onGameOver: (score: number) => void }) => {
   const GRID = 20;
   const [state, setState] = usePersistentState<SnakeState>('game_mem_snake', { snake: [{ x: 10, y: 10 }], food: { x: 15, y: 15 }, score: 0, highScore: 0, gameOver: false, paused: true });
   const [dir, setDir] = useState({ x: 0, y: 0 });
@@ -488,7 +683,7 @@ const SnakeGame = ({ onGameOver }: { onGameOver: () => void }) => {
     setState(prev => {
       const head = { x: prev.snake[0].x + dir.x, y: prev.snake[0].y + dir.y };
       if (head.x < 0 || head.x >= GRID || head.y < 0 || head.y >= GRID || prev.snake.some(s => s.x === head.x && s.y === head.y)) {
-        onGameOver(); 
+        onGameOver(prev.score); 
         SoundSynthesizer.play('lose');
         return { ...prev, gameOver: true };
       }
@@ -540,7 +735,7 @@ const SnakeGame = ({ onGameOver }: { onGameOver: () => void }) => {
 
 // --- 2048 ---
 type State2048 = { board: number[]; score: number; bestScore: number; gameOver: boolean; hasWon: boolean; };
-const Game2048 = ({ onMove }: { onMove: () => void }) => {
+const Game2048 = ({ onMove }: { onMove: (score: number) => void }) => {
   const [state, setState] = usePersistentState<State2048>('game_mem_2048', { board: Array(16).fill(0), score: 0, bestScore: 0, gameOver: false, hasWon: false });
 
   useEffect(() => { if (state.board.every(n => n === 0)) init(); }, []);
@@ -555,6 +750,24 @@ const Game2048 = ({ onMove }: { onMove: () => void }) => {
   const addNum = (b: number[]) => {
     const empty = b.map((v,i)=>v===0?i:-1).filter(i=>i!==-1);
     if(empty.length) b[empty[Math.floor(Math.random()*empty.length)]] = Math.random()>.9 ? 4 : 2;
+  };
+
+  const checkGameOver = (b: number[]) => {
+    // 1. If any cell is 0, game is not over
+    if (b.includes(0)) return false;
+    
+    // 2. Check adjacent cells for merges
+    for (let i = 0; i < 16; i++) {
+        const val = b[i];
+        const r = Math.floor(i / 4);
+        const c = i % 4;
+
+        // Check Right
+        if (c < 3 && val === b[i + 1]) return false;
+        // Check Down
+        if (r < 3 && val === b[i + 4]) return false;
+    }
+    return true;
   };
 
   const slideRow = (row: number[], updateScore: (n: number) => void) => {
@@ -601,10 +814,19 @@ const Game2048 = ({ onMove }: { onMove: () => void }) => {
        const newScore = state.score + gainedScore;
        const newBest = Math.max(newScore, state.bestScore);
        let hasWon = state.hasWon;
+       let isGameOver = false;
+
        if (newBoard.includes(2048) && !hasWon) { hasWon = true; SoundSynthesizer.play('win'); }
-       setState({ ...state, board: newBoard, score: newScore, bestScore: newBest, hasWon });
+       
+       if (checkGameOver(newBoard)) {
+           isGameOver = true;
+           SoundSynthesizer.play('lose');
+           onMove(newScore); // Save score
+       }
+
+       setState({ ...state, board: newBoard, score: newScore, bestScore: newBest, hasWon, gameOver: isGameOver });
        SoundSynthesizer.play(gainedScore > 0 ? 'merge' : 'move');
-       onMove();
+       if (!isGameOver) onMove(newScore);
     }
   };
 
@@ -621,7 +843,7 @@ const Game2048 = ({ onMove }: { onMove: () => void }) => {
   const getTextSize = (v: number) => { if (v > 1000) return 'text-xl'; if (v > 100) return 'text-2xl'; return 'text-3xl'; };
 
   return (
-    <div className="flex flex-col items-center select-none h-full justify-center w-full" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+    <div className="flex flex-col items-center select-none h-full justify-center w-full relative" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
        <div className="flex justify-between w-full max-w-[350px] mb-6 items-center">
           <div className="text-3xl font-bold bg-yellow-500 text-white px-4 py-2 rounded-xl shadow-lg">2048</div>
           <div className="flex gap-2">
@@ -630,8 +852,18 @@ const Game2048 = ({ onMove }: { onMove: () => void }) => {
           </div>
           <button onClick={init} className="bg-white p-3 rounded-full shadow hover:bg-gray-100 transition-colors"><RefreshCw size={20} className="text-primary"/></button>
        </div>
-       <div className="w-full max-w-[350px] aspect-square bg-gray-300/50 backdrop-blur-md p-3 rounded-2xl shadow-inner border border-white/20 grid grid-cols-4 grid-rows-4 gap-3">
+       <div className="w-full max-w-[350px] aspect-square bg-gray-300/50 backdrop-blur-md p-3 rounded-2xl shadow-inner border border-white/20 grid grid-cols-4 grid-rows-4 gap-3 relative">
           {state.board.map((v, i) => (<div key={i} className={`w-full h-full flex items-center justify-center font-bold rounded-xl shadow-sm transition-all duration-200 border overflow-hidden ${v === 0 ? 'bg-gray-200/50 border-transparent' : getColor(v)} ${v > 0 ? 'scale-100 opacity-100' : 'scale-100 opacity-100'} ${getTextSize(v)}`}>{v > 0 && v}</div>))}
+          
+          {state.gameOver && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/40 backdrop-blur-sm rounded-2xl">
+                <div className="bg-white/90 dark:bg-gray-800/90 p-6 rounded-3xl shadow-2xl flex flex-col items-center animate-fade-in border border-white/20">
+                    <h3 className="text-3xl font-bold mb-4 text-red-500">游戏结束</h3>
+                    <p className="text-gray-500 mb-6 font-bold">最终得分: {state.score}</p>
+                    <button onClick={init} className="px-8 py-3 bg-primary text-white rounded-full font-bold shadow-lg shadow-primary/30 hover:scale-105 transition-transform active:scale-95">再来一局</button>
+                </div>
+            </div>
+          )}
        </div>
        <p className="mt-6 text-gray-400 text-sm font-medium">滑动屏幕移动合并方块</p>
     </div>
@@ -639,89 +871,330 @@ const Game2048 = ({ onMove }: { onMove: () => void }) => {
 };
 
 // --- MATCH 3 (Fruit Edition) ---
-type Match3State = { board: string[]; score: number; };
+type SpecialType = 'NONE' | 'ROW' | 'COL' | 'BOMB' | 'RAINBOW';
+type Match3Cell = {
+  type: string;
+  special: SpecialType;
+  id: number; 
+};
+type Match3State = { board: Match3Cell[]; score: number; gameOver: boolean; };
+
 const Match3Game = () => {
   const { recordPlay } = useGameStats(GameType.MATCH3);
   const WIDTH = 8;
   const FRUITS = ['🍎', '🍊', '🍇', '🍌', '🥥', '🍉'];
-  const [state, setState] = usePersistentState<Match3State>('game_mem_match3', { board: [], score: 0 });
+  const [state, setState] = usePersistentState<Match3State>('game_mem_match3_v7', { board: [], score: 0, gameOver: false });
   const [selected, setSelected] = useState<number | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [matchedIndices, setMatchedIndices] = useState<Set<number>>(new Set());
+  const nextId = useRef(0);
 
-  useEffect(() => { if (state.board.length === 0) createBoard(); }, []);
-
-  const createBoard = () => {
-    const b = [];
-    for(let i=0; i<WIDTH*WIDTH; i++) b.push(FRUITS[Math.floor(Math.random() * FRUITS.length)]);
-    setState({ ...state, board: b });
+  const getNextId = () => {
+    nextId.current += 1;
+    return nextId.current;
   };
 
-  const checkForMatches = useCallback(() => {
-    const board = state.board;
-    if (board.length === 0) return false;
-    const matches = new Set<number>();
-    
-    for(let i=0; i<64; i++) {
-       if(i%WIDTH < WIDTH-2) {
-         if(board[i] === board[i+1] && board[i] === board[i+2] && board[i] !== '') { matches.add(i); matches.add(i+1); matches.add(i+2); }
-       }
-       if(i < WIDTH*(WIDTH-2)) {
-         if(board[i] === board[i+WIDTH] && board[i] === board[i+WIDTH*2] && board[i] !== '') { matches.add(i); matches.add(i+WIDTH); matches.add(i+WIDTH*2); }
-       }
-    }
-    
-    if(matches.size > 0) {
-      setIsProcessing(true);
-      const newB = [...board];
-      matches.forEach(idx => newB[idx] = '');
-      setState(prev => ({ ...prev, board: newB, score: prev.score + matches.size * 10 }));
-      SoundSynthesizer.play('merge');
-      setTimeout(() => fillBoard(newB), 300);
-      recordPlay();
-      return true;
-    }
-    setIsProcessing(false);
-    return false;
-  }, [state.board]);
+  const createRandomCell = (special: SpecialType = 'NONE', forcedType?: string): Match3Cell => ({
+    type: forcedType || FRUITS[Math.floor(Math.random() * FRUITS.length)],
+    special,
+    id: getNextId()
+  });
 
-  const fillBoard = (b: string[]) => {
+  // Init Board
+  useEffect(() => { 
+    if (state.board.length === 0) {
+        initGame();
+    }
+    setIsProcessing(false); // Reset lock on mount
+  }, []);
+
+  const initGame = () => {
+      const b: Match3Cell[] = [];
+      for(let i=0; i<WIDTH*WIDTH; i++) b.push(createRandomCell());
+      setState({ board: b, score: 0, gameOver: false });
+      setSelected(null);
+      setMatchedIndices(new Set());
+      setIsProcessing(false);
+      SoundSynthesizer.play('move');
+  };
+
+  // --- GAME LOGIC FUNCTIONS ---
+  
+  const getSpecialAffectedIndices = (idx: number, type: SpecialType, board: Match3Cell[]) => {
+     const indices: number[] = [];
+     if (type === 'ROW') {
+         const rowStart = Math.floor(idx / WIDTH) * WIDTH;
+         for (let i=0; i<WIDTH; i++) indices.push(rowStart + i);
+     } else if (type === 'COL') {
+         const col = idx % WIDTH;
+         for (let i=0; i<WIDTH; i++) indices.push(i * WIDTH + col);
+     } else if (type === 'BOMB') {
+         const r = Math.floor(idx / WIDTH);
+         const c = idx % WIDTH;
+         for(let dr=-1; dr<=1; dr++) {
+             for(let dc=-1; dc<=1; dc++) {
+                 const nr = r+dr, nc = c+dc;
+                 if(nr>=0 && nr<WIDTH && nc>=0 && nc<WIDTH) indices.push(nr*WIDTH+nc);
+             }
+         }
+     } else if (type === 'RAINBOW') {
+         const r = Math.floor(idx / WIDTH);
+         const c = idx % WIDTH;
+         for(let dr=-1; dr<=1; dr++) {
+             for(let dc=-1; dc<=1; dc++) {
+                 const nr = r+dr, nc = c+dc;
+                 if(nr>=0 && nr<WIDTH && nc>=0 && nc<WIDTH) indices.push(nr*WIDTH+nc);
+             }
+         }
+     }
+     return indices;
+  };
+
+  const findMatches = (board: Match3Cell[]) => {
+    const matches = new Set<number>();
+    const specialCreations: { idx: number, type: SpecialType }[] = [];
+
+    // Horizontal
+    for(let i=0; i<64; i++) {
+       if(i % WIDTH < WIDTH-2) {
+         if(board[i].type === board[i+1].type && board[i].type === board[i+2].type && board[i].type !== '') {
+            let matchLen = 3;
+            while(i % WIDTH + matchLen < WIDTH && board[i].type === board[i+matchLen].type) matchLen++;
+            
+            for(let k=0; k<matchLen; k++) matches.add(i+k);
+            if (matchLen >= 5) specialCreations.push({ idx: i + 2, type: 'RAINBOW' });
+            else if (matchLen === 4) specialCreations.push({ idx: i + 1, type: 'ROW' });
+         }
+       }
+    }
+
+    // Vertical
+    for(let i=0; i<WIDTH*(WIDTH-2); i++) {
+        if(board[i].type === board[i+WIDTH].type && board[i].type === board[i+WIDTH*2].type && board[i].type !== '') {
+            let matchLen = 3;
+            while(i + WIDTH*matchLen < 64 && board[i].type === board[i+WIDTH*matchLen].type) matchLen++;
+            
+            for(let k=0; k<matchLen; k++) matches.add(i+WIDTH*k);
+            if (matchLen >= 5) specialCreations.push({ idx: i + WIDTH*2, type: 'RAINBOW' });
+            else if (matchLen === 4) specialCreations.push({ idx: i + WIDTH*1, type: 'COL' });
+        }
+    }
+    
+    // Expand Matches (Chain Reactions)
+    const expandedMatches = new Set(matches);
+    const toProcess = Array.from(matches);
+    
+    let head = 0;
+    while(head < toProcess.length) {
+        const idx = toProcess[head++];
+        const cell = board[idx];
+        if (cell.special !== 'NONE') {
+            const extra = getSpecialAffectedIndices(idx, cell.special, board);
+            extra.forEach(eIdx => {
+                if (!expandedMatches.has(eIdx)) {
+                    expandedMatches.add(eIdx);
+                    toProcess.push(eIdx);
+                }
+            });
+        }
+    }
+
+    return { matches: expandedMatches, specialCreations };
+  };
+
+  const applyMatches = (board: Match3Cell[], matches: Set<number>, specialCreations: { idx: number, type: SpecialType }[]) => {
+      const newB = [...board];
+      // Create specials
+      specialCreations.forEach(sc => {
+          if (sc.type !== 'NONE') {
+              matches.delete(sc.idx); 
+              newB[sc.idx] = createRandomCell(sc.type, board[sc.idx].type);
+          }
+      });
+      // Clear matched
+      matches.forEach(idx => {
+          newB[idx] = { ...newB[idx], type: '' };
+      });
+      return newB;
+  };
+
+  const fillBoard = (b: Match3Cell[]) => {
     const newB = [...b];
     for(let i=0; i<WIDTH; i++) {
        let emptySlots = 0;
        for(let j=WIDTH-1; j>=0; j--) {
           const idx = j*WIDTH + i;
-          if(newB[idx] === '') { emptySlots++; } else if(emptySlots > 0) { newB[(j+emptySlots)*WIDTH + i] = newB[idx]; newB[idx] = ''; }
+          if(newB[idx].type === '') { 
+              emptySlots++; 
+          } else if(emptySlots > 0) { 
+              newB[(j+emptySlots)*WIDTH + i] = newB[idx]; 
+              newB[idx] = { ...newB[idx], type: '' }; 
+          }
        }
-       for(let j=0; j<emptySlots; j++) newB[j*WIDTH+i] = FRUITS[Math.floor(Math.random() * FRUITS.length)];
+       for(let j=0; j<emptySlots; j++) {
+           const specialChance = Math.random();
+           let special: SpecialType = 'NONE';
+           if (specialChance > 0.97) special = 'BOMB'; 
+           else if (specialChance > 0.94) special = 'ROW';
+           newB[j*WIDTH+i] = createRandomCell(special);
+       }
     }
-    setState(prev => ({ ...prev, board: newB }));
+    return newB;
   };
 
-  useEffect(() => { 
-    if(state.board.length && !selected && !isProcessing) {
-        const t = setTimeout(() => checkForMatches(), 250);
-        return () => clearTimeout(t);
-    }
-  }, [state.board, selected, isProcessing]);
+  // Check if any valid move exists
+  const hasValidMoves = (currentBoard: Match3Cell[]) => {
+    // If board is empty/processing, assume valid
+    if(currentBoard.length === 0) return true;
 
-  const handleDrag = (i: number) => {
+    // 1. Rainbows are wildcards, so almost always valid unless board empty
+    if (currentBoard.some(c => c.special === 'RAINBOW')) return true;
+
+    // 2. Brute force check all swaps
+    for(let i=0; i<64; i++) {
+        const r = Math.floor(i/WIDTH);
+        const c = i % WIDTH;
+
+        // Try Right
+        if (c < WIDTH - 1) {
+            const right = i + 1;
+            // Swap
+            const b1 = [...currentBoard];
+            [b1[i], b1[right]] = [b1[right], b1[i]];
+            if (findMatches(b1).matches.size > 0) return true;
+        }
+
+        // Try Down
+        if (r < WIDTH - 1) {
+            const down = i + WIDTH;
+            const b2 = [...currentBoard];
+            [b2[i], b2[down]] = [b2[down], b2[i]];
+            if (findMatches(b2).matches.size > 0) return true;
+        }
+    }
+    return false;
+  };
+
+  // --- GAME LOOP ---
+  useEffect(() => {
+     if (state.board.length === 0 || state.gameOver) return;
+
+     let timer: any;
+     const processGame = async () => {
+         const { matches, specialCreations } = findMatches(state.board);
+         
+         if (matches.size > 0) {
+             setIsProcessing(true);
+             
+             // 1. Highlight Matches (Visual Feedback)
+             setMatchedIndices(matches);
+             await new Promise(r => setTimeout(r, 300)); // Show feedback animation
+
+             // 2. Clear & Score
+             const clearedBoard = applyMatches(state.board, matches, specialCreations);
+             setState(prev => ({ ...prev, board: clearedBoard, score: prev.score + matches.size * 10 }));
+             setMatchedIndices(new Set()); // Clear highlights
+             
+             SoundSynthesizer.play('merge');
+             if (specialCreations.length > 0) SoundSynthesizer.play('special');
+
+             // 3. Fill
+             await new Promise(r => setTimeout(r, 200));
+             const filledBoard = fillBoard(clearedBoard);
+             setState(prev => ({ ...prev, board: filledBoard }));
+             
+         } else {
+             // Stable state
+             setIsProcessing(false);
+             setMatchedIndices(new Set());
+             
+             // Deadlock check
+             if (!hasValidMoves(state.board)) {
+                 setState(prev => ({ ...prev, gameOver: true }));
+                 SoundSynthesizer.play('lose');
+                 recordPlay(state.score);
+             } else {
+                 // Save progress
+                 recordPlay(state.score); 
+             }
+         }
+     };
+
+     if (isProcessing || findMatches(state.board).matches.size > 0) {
+         timer = setTimeout(processGame, 100);
+     }
+
+     return () => clearTimeout(timer);
+  }, [state.board]);
+
+  const handleTap = async (i: number) => {
+    if(isProcessing || state.gameOver) return;
     SoundSynthesizer.init();
-    if(isProcessing) return;
+    
     if(selected === null) {
       setSelected(i);
       SoundSynthesizer.play('select');
     } else {
+      if (selected === i) {
+          setSelected(null);
+          return;
+      }
+
       const diff = Math.abs(selected - i);
-      const validSwap = (diff === 1 && Math.floor(selected/WIDTH) === Math.floor(i/WIDTH)) || diff === WIDTH;
+      const isAdjacent = (diff === 1 && Math.floor(selected/WIDTH) === Math.floor(i/WIDTH)) || diff === WIDTH;
       
-      if(validSwap) {
-        const newB = [...state.board];
-        const temp = newB[selected];
-        newB[selected] = newB[i];
-        newB[i] = temp;
-        setState({ ...state, board: newB });
+      if(isAdjacent) {
+        // Tentative Swap
+        let newB = [...state.board];
+        [newB[selected], newB[i]] = [newB[i], newB[selected]];
+        
+        setState(prev => ({ ...prev, board: newB }));
         setSelected(null);
         SoundSynthesizer.play('move');
+
+        // Check Validity
+        const cellA = state.board[selected];
+        const cellB = state.board[i];
+        
+        const isRainbowSwap = cellA.special === 'RAINBOW' || cellB.special === 'RAINBOW';
+        
+        if (isRainbowSwap) {
+             setIsProcessing(true);
+             const rainbowIdx = cellA.special === 'RAINBOW' ? i : selected;
+             const targetIdx = cellA.special === 'RAINBOW' ? selected : i;
+             const targetColor = newB[targetIdx].type;
+             
+             // Rainbow Feedback
+             const toClear = new Set<number>();
+             toClear.add(rainbowIdx);
+             newB.forEach((c, idx) => { if(c.type === targetColor) toClear.add(idx); });
+             setMatchedIndices(toClear);
+             
+             await new Promise(r => setTimeout(r, 400));
+             
+             const finalB = [...newB];
+             toClear.forEach(idx => { finalB[idx] = { ...finalB[idx], type: '' }; });
+             
+             setState(prev => ({ ...prev, board: finalB, score: prev.score + toClear.size * 20 }));
+             setMatchedIndices(new Set());
+             SoundSynthesizer.play('special');
+             return;
+        }
+
+        const { matches } = findMatches(newB);
+        if (matches.size > 0) {
+            setIsProcessing(true); 
+        } else {
+            // INVALID MOVE - UNDO
+            setIsProcessing(true); 
+            await new Promise(r => setTimeout(r, 250));
+            SoundSynthesizer.play('lose'); 
+            
+            const revertedB = [...newB];
+            [revertedB[selected], revertedB[i]] = [revertedB[i], revertedB[selected]];
+            setState(prev => ({ ...prev, board: revertedB }));
+            setIsProcessing(false);
+        }
       } else {
         setSelected(i);
         SoundSynthesizer.play('select');
@@ -729,18 +1202,68 @@ const Match3Game = () => {
     }
   };
 
+  const getSpecialIcon = (special: SpecialType) => {
+      switch(special) {
+          case 'BOMB': return <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10"><Bomb size={24} className="text-gray-900 drop-shadow-md animate-pulse" /></div>;
+          case 'ROW': return <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10"><Rocket size={24} className="text-white drop-shadow-md rotate-90" /></div>;
+          case 'COL': return <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10"><Rocket size={24} className="text-white drop-shadow-md" /></div>;
+          case 'RAINBOW': return <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10"><Sparkles size={28} className="text-yellow-200 drop-shadow-lg animate-spin" /></div>;
+          default: return null;
+      }
+  };
+
+  const getSpecialStyle = (special: SpecialType) => {
+      switch(special) {
+          case 'BOMB': return 'bg-gray-400/50 ring-2 ring-gray-600';
+          case 'ROW': return 'bg-blue-400/50 ring-2 ring-blue-300';
+          case 'COL': return 'bg-blue-400/50 ring-2 ring-blue-300';
+          case 'RAINBOW': return 'bg-gradient-to-br from-red-400 via-yellow-400 to-purple-500 opacity-90 ring-2 ring-white';
+          default: return '';
+      }
+  };
+
   return (
-    <div className="flex flex-col items-center justify-center h-full">
+    <div className="flex flex-col items-center justify-center h-full relative">
       <div className="flex justify-between w-full max-w-[350px] mb-4 glass-panel p-3 rounded-2xl items-center">
         <h2 className="text-xl font-bold dark:text-white px-2">消消乐</h2>
-        <div className="bg-primary/10 px-4 py-1 rounded-full text-primary font-mono text-xl font-bold">{state.score}</div>
+        <div className="flex gap-3 items-center">
+            <div className="bg-primary/10 px-4 py-1 rounded-full text-primary font-mono text-xl font-bold">{state.score}</div>
+            <button onClick={initGame} className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-500 hover:text-primary active:rotate-180 transition-all"><RotateCcw size={18} /></button>
+        </div>
       </div>
-      <div className="grid grid-cols-8 gap-1 bg-white/40 p-3 rounded-2xl shadow-xl backdrop-blur-md border border-white/40" style={{ width: '100%', maxWidth: '360px', aspectRatio: '1/1' }}>
-        {state.board.map((fruit, i) => (
-          <div key={i} onClick={() => handleDrag(i)} className={`w-full h-full flex items-center justify-center text-2xl rounded-lg cursor-pointer transition-all duration-200 select-none ${selected === i ? 'bg-white shadow-lg scale-110 ring-2 ring-primary z-10' : 'hover:bg-white/20'} ${fruit === '' ? 'scale-0 opacity-0' : 'scale-100 opacity-100'}`}>
-             {fruit}
+      
+      <div className="relative">
+         <div className="grid grid-cols-8 gap-0.5 bg-white/30 dark:bg-gray-800/30 p-1.5 rounded-2xl shadow-xl backdrop-blur-md border border-white/40 aspect-square mx-auto" style={{ width: '100%', maxWidth: '380px' }}>
+            {state.board.map((cell, i) => (
+            <div key={`${cell.id}-${i}`} onClick={() => handleTap(i)} 
+                className={`w-full h-full flex items-center justify-center text-3xl rounded-md cursor-pointer transition-all duration-300 select-none relative
+                ${selected === i ? 'bg-white/80 shadow-[0_0_15px_rgba(255,255,255,0.8)] scale-110 z-20 ring-4 ring-primary' : 'hover:bg-white/20 active:scale-95'} 
+                ${cell.type === '' ? 'scale-0 opacity-0' : 'scale-100 opacity-100'}
+                ${matchedIndices.has(i) ? 'scale-0 opacity-0 bg-white/50 rotate-180' : ''} 
+                ${getSpecialStyle(cell.special)}
+                `}>
+                <span className={`drop-shadow-sm transition-transform duration-300 ${matchedIndices.has(i) ? 'scale-150' : ''}`}>{cell.type}</span>
+                {getSpecialIcon(cell.special)}
+            </div>
+            ))}
+         </div>
+
+         {state.gameOver && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/30 backdrop-blur-[3px] rounded-2xl">
+             <div className="bg-white/90 dark:bg-gray-800/90 p-6 rounded-3xl shadow-2xl flex flex-col items-center animate-fade-in border border-white/20">
+                <div className="text-5xl mb-4 animate-bounce"><Frown size={48} className="text-gray-400"/></div>
+                <h3 className="text-2xl font-bold mb-2 text-red-500">无步可走</h3>
+                <p className="text-gray-500 mb-6 font-bold">最终得分: {state.score}</p>
+                <button onClick={initGame} className="px-8 py-3 bg-primary text-white rounded-full font-bold shadow-lg shadow-primary/30 hover:scale-105 transition-transform active:scale-95">再来一局</button>
+             </div>
           </div>
-        ))}
+         )}
+      </div>
+
+      <div className="mt-6 flex flex-col items-center gap-2 h-12 justify-start w-full relative">
+         <div className="absolute top-0 w-full flex justify-center">
+            {isProcessing && <div className="text-primary font-bold animate-pulse text-sm bg-white/50 px-3 py-1 rounded-full shadow-sm">消除中...</div>}
+         </div>
       </div>
     </div>
   );
@@ -776,7 +1299,7 @@ const ParkourGame = () => {
     gameRef.current.dinoY = 0;
     setDinoY(0);
     gameRef.current.gameLoop = requestAnimationFrame(update);
-    recordPlay();
+    recordPlay(0);
     SoundSynthesizer.play('move');
   };
 
@@ -801,6 +1324,7 @@ const ParkourGame = () => {
           gameRef.current.isPlaying = false;
           setIsPlaying(false);
           setScore(currentScore => {
+             recordPlay(currentScore);
              if (currentScore > state.highScore) setState({ highScore: currentScore });
              return currentScore;
           });
@@ -833,6 +1357,176 @@ const ParkourGame = () => {
   );
 };
 
+// --- WOODEN FISH (Digital Merit) ---
+const WoodenFishGame = () => {
+  const { recordPlay } = useGameStats(GameType.WOODEN_FISH);
+  const [count, setCount] = useState(() => {
+    const saved = localStorage.getItem('game_wooden_fish_count');
+    return saved ? parseInt(saved) : 0;
+  });
+  const [animating, setAnimating] = useState(false);
+  const [floats, setFloats] = useState<{id: number, x: number, y: number}[]>([]);
+  const idRef = useRef(0);
+
+  useEffect(() => {
+    localStorage.setItem('game_wooden_fish_count', count.toString());
+  }, [count]);
+
+  const tap = (e: React.MouseEvent | React.TouchEvent) => {
+    // Prevent default to avoid double firing on touch devices if mixed events
+    // e.preventDefault(); 
+    
+    SoundSynthesizer.init();
+    SoundSynthesizer.play('wood');
+    if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(50);
+
+    setAnimating(true);
+    setTimeout(() => setAnimating(false), 100);
+
+    setCount(c => {
+        const newC = c + 1;
+        // Record play occasionally to track usage
+        if (newC % 10 === 0) recordPlay(newC);
+        return newC;
+    });
+
+    // Float Animation
+    const id = idRef.current++;
+    // Get click position or random position near center
+    let clientX, clientY;
+    if ('touches' in e) {
+       clientX = e.touches[0].clientX;
+       clientY = e.touches[0].clientY;
+    } else {
+       clientX = (e as React.MouseEvent).clientX;
+       clientY = (e as React.MouseEvent).clientY;
+    }
+    
+    // Adjust relative to container center if desired, or just use click pos
+    // Using click pos is more dynamic
+    setFloats(prev => [...prev, { id, x: clientX, y: clientY }]);
+    setTimeout(() => {
+        setFloats(prev => prev.filter(f => f.id !== id));
+    }, 1000);
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center h-full w-full select-none" onTouchStart={(e) => { /* prevent zoom */ }}>
+       <div className="absolute top-8 text-center">
+          <p className="text-gray-500 font-bold mb-1 uppercase tracking-widest text-xs">当前功德</p>
+          <h2 className="text-5xl font-mono font-bold text-gray-800 dark:text-white tabular-nums">{count}</h2>
+       </div>
+
+       <div 
+         className={`
+            w-64 h-64 bg-amber-800 rounded-full shadow-[0_20px_50px_-12px_rgba(146,64,14,0.5)]
+            flex items-center justify-center cursor-pointer
+            relative transition-transform duration-100
+            ${animating ? 'scale-95' : 'scale-100'}
+         `}
+         onMouseDown={tap}
+         onTouchStart={tap}
+       >
+          <div className="w-56 h-56 bg-amber-700 rounded-full shadow-inner border-4 border-amber-900/30 flex items-center justify-center relative overflow-hidden">
+             {/* Simple Wood Texture CSS */}
+             <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_30%_30%,#fff,transparent)]"></div>
+             {/* "Eye" of the wooden fish */}
+             <div className="w-32 h-2 bg-black/20 rounded-full absolute top-1/3"></div>
+             <div className="w-40 h-2 bg-black/20 rounded-full absolute bottom-1/3"></div>
+             <Music size={80} className="text-amber-900/40" />
+          </div>
+       </div>
+
+       <p className="mt-12 text-gray-400 font-medium animate-pulse">点击积攒功德</p>
+
+       {/* Floating Text Container */}
+       {floats.map(f => (
+           <div 
+             key={f.id}
+             className="fixed text-xl font-bold text-white pointer-events-none animate-float-up z-50"
+             style={{ left: f.x, top: f.y, textShadow: '0 2px 4px rgba(0,0,0,0.2)' }}
+           >
+             功德 +1
+           </div>
+       ))}
+       <style>{`
+         @keyframes floatUp {
+           0% { opacity: 1; transform:translate(-50%, -50%) scale(1); }
+           100% { opacity: 0; transform:translate(-50%, -150px) scale(1.5); }
+         }
+         .animate-float-up {
+           animation: floatUp 0.8s ease-out forwards;
+         }
+       `}</style>
+    </div>
+  );
+};
+
+// --- BUBBLE WRAP ---
+const BubbleWrapGame = () => {
+    const { recordPlay } = useGameStats(GameType.BUBBLE_WRAP);
+    const ROWS = 8;
+    const COLS = 6;
+    const [bubbles, setBubbles] = useState<boolean[]>(Array(ROWS * COLS).fill(false)); // false = unpopped
+
+    const pop = (index: number) => {
+        if (bubbles[index]) return; // Already popped
+
+        SoundSynthesizer.init();
+        SoundSynthesizer.play('pop');
+        if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(50);
+
+        const newB = [...bubbles];
+        newB[index] = true;
+        setBubbles(newB);
+        
+        // Check complete
+        if (newB.every(b => b)) {
+            recordPlay(100);
+        }
+    };
+
+    const reset = () => {
+        setBubbles(Array(ROWS * COLS).fill(false));
+        SoundSynthesizer.play('move');
+    };
+
+    return (
+        <div className="flex flex-col items-center justify-center h-full w-full">
+            <div className="flex justify-between w-full max-w-[320px] mb-4">
+                 <h2 className="text-xl font-bold dark:text-white">捏泡泡</h2>
+                 <button onClick={reset} className="p-2 bg-white/50 dark:bg-gray-800/50 rounded-full hover:bg-white hover:shadow-md transition-all text-gray-600 dark:text-gray-300">
+                    <RefreshCw size={20} />
+                 </button>
+            </div>
+
+            <div className="glass-panel p-4 rounded-2xl shadow-xl bg-blue-50/50 dark:bg-gray-800/50">
+                <div className="grid grid-cols-6 gap-3">
+                    {bubbles.map((popped, i) => (
+                        <button
+                            key={i}
+                            onMouseDown={() => pop(i)}
+                            onTouchStart={(e) => { e.preventDefault(); pop(i); }}
+                            className={`
+                                w-10 h-10 rounded-full transition-all duration-200 relative
+                                flex items-center justify-center
+                                ${popped 
+                                    ? 'bg-blue-100/30 shadow-inner scale-90' 
+                                    : 'bg-gradient-to-br from-blue-100 to-blue-300 shadow-[2px_4px_6px_rgba(0,0,0,0.1),inset_2px_2px_4px_rgba(255,255,255,0.8)] hover:scale-105 active:scale-95 cursor-pointer'
+                                }
+                            `}
+                        >
+                            {!popped && <div className="absolute top-2 left-2 w-3 h-2 bg-white/60 rounded-full rotate-45 blur-[1px]"></div>}
+                        </button>
+                    ))}
+                </div>
+            </div>
+            
+            <p className="mt-6 text-gray-400 text-sm font-medium">解压神器，尽情释放</p>
+        </div>
+    );
+};
+
 
 // --- MAIN RUNNER ---
 export const GameRunner = () => {
@@ -850,11 +1544,13 @@ export const GameRunner = () => {
   const renderGame = () => {
     switch (type) {
       case GameType.SNAKE: return <SnakeGame onGameOver={recordPlay} />;
-      case GameType.G2048: return <Game2048 onMove={() => {}} />;
+      case GameType.G2048: return <Game2048 onMove={(s) => {}} />;
       case GameType.MINESWEEPER: return <MinesweeperGame />;
       case GameType.GOMOKU: return <GomokuGame />;
       case GameType.PARKOUR: return <ParkourGame />;
       case GameType.MATCH3: return <Match3Game />;
+      case GameType.WOODEN_FISH: return <WoodenFishGame />;
+      case GameType.BUBBLE_WRAP: return <BubbleWrapGame />;
       default: return <div>Game not found</div>;
     }
   };
@@ -866,7 +1562,7 @@ export const GameRunner = () => {
           <button onClick={() => navigate('/games')} className="p-2 -ml-2 text-gray-600 dark:text-gray-300 glass-panel rounded-full hover:bg-white/40 transition-colors">
             <ChevronLeft size={28} />
           </button>
-          <h1 className="text-xl font-bold ml-4 text-gray-800 dark:text-white capitalize drop-shadow-sm">{type}</h1>
+          <h1 className="text-xl font-bold ml-4 text-gray-800 dark:text-white capitalize drop-shadow-sm">{type === GameType.WOODEN_FISH ? '电子木鱼' : type === GameType.BUBBLE_WRAP ? '捏泡泡' : type}</h1>
         </div>
         <div className="flex gap-2">
            <button onClick={toggleSound} className="p-2 glass-panel rounded-full text-gray-600 dark:text-gray-300">

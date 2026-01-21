@@ -87,4 +87,5 @@ export const MEDITATION_TRACKS: MeditationTrack[] = [
   { id: 'm2', title: '深度睡眠引导', duration: 900, category: 'sleep', color: 'bg-indigo-100 text-indigo-600' },
   { id: 'm3', title: '快速减压', duration: 180, category: 'relax', color: 'bg-green-100 text-green-600' },
   { id: 'm4', title: '专注力训练', duration: 600, category: 'focus', color: 'bg-blue-100 text-blue-600' },
+  { id: 'm5', title: '情绪平衡', duration: 300, category: 'relax', color: 'bg-teal-100 text-teal-600' },
 ];

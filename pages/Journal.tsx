@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context';
 import { JournalEntry } from '../types';
-import { Plus, Smile, Camera, X, Trash2, Edit2, Calendar } from 'lucide-react';
+import { Plus, Smile, Camera, X, Trash2, Edit2, Calendar, MapPin, Loader2, ImageIcon, Navigation } from 'lucide-react';
 
 export const Journal = () => {
   const { journal, addJournalEntry, updateJournalEntry, deleteJournalEntry } = useApp();
@@ -12,6 +12,8 @@ export const Journal = () => {
   const [content, setContent] = useState('');
   const [mood, setMood] = useState(50);
   const [image, setImage] = useState<string | null>(null);
+  const [location, setLocation] = useState<string | null>(null);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null); // If set, we are editing this ID
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -22,6 +24,7 @@ export const Journal = () => {
       setContent(selectedEntry.content);
       setMood(selectedEntry.mood);
       setImage(selectedEntry.image || null);
+      setLocation(selectedEntry.location || null);
     } else if (isWriting && !editingId) {
       resetForm();
     }
@@ -38,6 +41,46 @@ export const Journal = () => {
     }
   };
 
+  const handleGetLocation = () => {
+    if (!navigator.geolocation) {
+      alert("您的设备不支持定位功能");
+      return;
+    }
+    setIsGettingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        try {
+           // Try simple reverse geocoding via OpenStreetMap (Free, no key required for basic usage)
+           const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10`);
+           if (res.ok) {
+             const data = await res.json();
+             const addr = data.address;
+             // Construct a readable location string
+             const locStr = addr.city || addr.town || addr.district || addr.village || addr.county || `${latitude.toFixed(2)}, ${longitude.toFixed(2)}`;
+             setLocation(locStr);
+           } else {
+             setLocation(`${latitude.toFixed(2)}, ${longitude.toFixed(2)}`);
+           }
+        } catch(e) {
+           // Fallback to coordinates
+           setLocation(`${latitude.toFixed(2)}, ${longitude.toFixed(2)}`);
+        }
+        setIsGettingLocation(false);
+      },
+      (err) => {
+        console.error(err);
+        let msg = "无法获取位置信息";
+        if (err.code === 1) msg = "请允许获取位置权限";
+        else if (err.code === 2) msg = "位置获取失败";
+        else if (err.code === 3) msg = "获取位置超时";
+        alert(msg);
+        setIsGettingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
   const saveEntry = () => {
     if (!content.trim()) return;
     
@@ -48,6 +91,7 @@ export const Journal = () => {
         content,
         mood,
         image: image || undefined,
+        location: location || undefined,
       };
       updateJournalEntry(updatedEntry);
       setSelectedEntry(updatedEntry); // Update view
@@ -60,6 +104,7 @@ export const Journal = () => {
         content,
         mood,
         image: image || undefined,
+        location: location || undefined,
         timestamp: Date.now(),
         dateStr: new Date().toLocaleDateString('zh-CN'),
       };
@@ -80,43 +125,55 @@ export const Journal = () => {
     setContent('');
     setMood(50);
     setImage(null);
+    setLocation(null);
     setEditingId(null);
   };
 
   // --- WRITE / EDIT MODE ---
   if (isWriting) {
     return (
-      <div className="fixed inset-0 z-50 flex flex-col p-6 animate-fade-in bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl">
-        <div className="flex justify-between items-center mb-6">
-          <button onClick={() => { setIsWriting(false); setEditingId(null); }} className="text-gray-500 p-2 hover:bg-gray-100 rounded-full transition-colors">
+      <div className="fixed inset-0 z-[100] flex flex-col p-6 animate-fade-in bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl overflow-y-auto">
+        <div className="flex justify-between items-center mb-6 shrink-0">
+          <button onClick={() => { setIsWriting(false); setEditingId(null); }} className="text-gray-500 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
             <X size={24} />
           </button>
           <span className="font-bold text-lg dark:text-white">{editingId ? '编辑日记' : '写日记'}</span>
-          <button onClick={saveEntry} className="bg-primary text-white px-4 py-1.5 rounded-full font-bold shadow-lg shadow-primary/30">
+          <button onClick={saveEntry} className="bg-primary text-white px-6 py-2 rounded-full font-bold shadow-lg shadow-primary/30 active:scale-95 transition-transform">
             {editingId ? '保存' : '发布'}
           </button>
         </div>
 
         <textarea 
-          className="w-full flex-1 bg-transparent text-lg resize-none outline-none dark:text-white placeholder-gray-400 p-2"
+          className="w-full flex-1 bg-transparent text-lg resize-none outline-none dark:text-white placeholder-gray-400 p-2 min-h-[150px]"
           placeholder="今天发生了什么有趣的事？..."
           value={content}
           onChange={(e) => setContent(e.target.value)}
           autoFocus
         />
 
-        {image && (
-          <div className="mb-4 relative rounded-2xl overflow-hidden shadow-lg h-40 group">
-            <img src={image} alt="Upload" className="w-full h-full object-cover" />
-            <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity" />
-            <button onClick={() => setImage(null)} className="absolute top-2 right-2 bg-black/50 p-1.5 rounded-full text-white backdrop-blur-sm">
-              <X size={16} />
-            </button>
-          </div>
-        )}
+        {/* Attachments Preview */}
+        <div className="space-y-3 mb-4 shrink-0">
+            {image && (
+              <div className="relative rounded-2xl overflow-hidden shadow-lg h-48 group bg-gray-100 dark:bg-gray-800">
+                <img src={image} alt="Upload" className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <button onClick={() => setImage(null)} className="absolute top-2 right-2 bg-black/50 p-2 rounded-full text-white backdrop-blur-md hover:bg-red-500 transition-colors">
+                  <X size={18} />
+                </button>
+              </div>
+            )}
+            
+            {location && (
+                <div className="inline-flex items-center gap-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 px-4 py-2 rounded-xl text-sm font-bold shadow-sm animate-fade-in border border-blue-100 dark:border-blue-800">
+                    <MapPin size={16} className="fill-blue-500/20" />
+                    {location}
+                    <button onClick={() => setLocation(null)} className="ml-2 hover:text-red-500 p-1 rounded-full hover:bg-blue-100 dark:hover:bg-blue-800/50"><X size={14}/></button>
+                </div>
+            )}
+        </div>
 
-        <div className="mt-4 space-y-4 pb-8">
-          <div className="glass-card p-4 rounded-xl flex items-center justify-between">
+        <div className="mt-auto space-y-4 pb-4 shrink-0">
+          <div className="glass-card p-4 rounded-2xl flex items-center justify-between border border-white/50 dark:border-white/10">
             <span className="text-gray-600 dark:text-gray-300 text-sm flex items-center gap-2 font-bold">
               <Smile size={20} className="text-yellow-500" /> 心情: {mood}
             </span>
@@ -125,13 +182,25 @@ export const Journal = () => {
               min="0" max="100" 
               value={mood} 
               onChange={(e) => setMood(Number(e.target.value))}
-              className="w-32 accent-primary h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer" 
+              className="w-32 accent-primary h-1.5 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer" 
             />
           </div>
 
-          <div className="flex gap-4">
-            <button onClick={() => fileInputRef.current?.click()} className="p-3 glass-card rounded-xl text-primary flex items-center gap-2 font-bold w-full justify-center active:scale-95 transition-transform">
-              <Camera size={20} /> 添加图片
+          <div className="flex gap-3">
+            <button 
+              onClick={() => fileInputRef.current?.click()} 
+              className="flex-1 p-3 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-300 rounded-2xl flex items-center justify-center gap-2 font-bold active:scale-95 transition-all hover:shadow-md border border-purple-100 dark:border-purple-800"
+            >
+              <ImageIcon size={20} />
+              {image ? '更换图片' : '添加图片'}
+            </button>
+            <button 
+                onClick={handleGetLocation} 
+                disabled={isGettingLocation}
+                className="flex-1 p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-300 rounded-2xl flex items-center justify-center gap-2 font-bold active:scale-95 transition-all hover:shadow-md border border-blue-100 dark:border-blue-800 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isGettingLocation ? <Loader2 size={20} className="animate-spin" /> : <Navigation size={20} />} 
+              {location ? '更新定位' : '添加定位'}
             </button>
             <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={handleImageUpload} />
           </div>
@@ -143,7 +212,7 @@ export const Journal = () => {
   // --- DETAIL VIEW MODE ---
   if (selectedEntry) {
     return (
-      <div className="fixed inset-0 z-40 bg-white dark:bg-gray-900 overflow-y-auto animate-fade-in flex flex-col">
+      <div className="fixed inset-0 z-[60] bg-white dark:bg-gray-900 overflow-y-auto animate-fade-in flex flex-col">
         {/* Detail Header */}
         <div className="sticky top-0 p-4 flex justify-between items-center bg-white/80 dark:bg-gray-900/80 backdrop-blur-md z-10 border-b border-gray-100 dark:border-gray-800">
            <button onClick={() => setSelectedEntry(null)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
@@ -173,9 +242,14 @@ export const Journal = () => {
               </div>
               <div>
                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{selectedEntry.dateStr}</h2>
-                 <p className="text-gray-500 text-sm">
-                   {new Date(selectedEntry.timestamp).toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'})}
-                 </p>
+                 <div className="flex items-center gap-2 text-gray-500 text-sm mt-1">
+                    <span>{new Date(selectedEntry.timestamp).toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'})}</span>
+                    {selectedEntry.location && (
+                        <span className="flex items-center gap-1 text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 px-2 py-0.5 rounded-md border border-blue-100 dark:border-blue-800">
+                            <MapPin size={10} /> {selectedEntry.location}
+                        </span>
+                    )}
+                 </div>
               </div>
               <div className="ml-auto">
                 <span className={`px-4 py-2 rounded-full text-sm font-bold border ${selectedEntry.mood > 80 ? 'bg-green-100 text-green-700 border-green-200' : selectedEntry.mood > 40 ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-gray-100 text-gray-700 border-gray-200'}`}>
@@ -235,7 +309,10 @@ export const Journal = () => {
                 <div className="flex justify-between items-center mb-3">
                   <div className="flex flex-col">
                     <span className="font-bold text-xl text-gray-800 dark:text-gray-100">{entry.dateStr.split('/')[2] || entry.dateStr.slice(-2)}日</span>
-                    <span className="text-xs text-gray-400 font-bold">{entry.dateStr}</span>
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400 font-bold">{entry.dateStr}</span>
+                        {entry.location && <span className="text-[10px] text-blue-400 flex items-center gap-0.5 bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded"><MapPin size={10} />{entry.location}</span>}
+                    </div>
                   </div>
                   <span className={`px-3 py-1 rounded-full text-xs font-bold border ${entry.mood > 80 ? 'bg-green-100/50 text-green-700 border-green-200' : entry.mood > 40 ? 'bg-blue-100/50 text-blue-700 border-blue-200' : 'bg-gray-100/50 text-gray-700 border-gray-200'}`}>
                     {entry.mood > 80 ? '😆 开心' : entry.mood > 40 ? '🙂 平静' : '😔 低落'}
@@ -243,8 +320,9 @@ export const Journal = () => {
                 </div>
                 <p className="text-gray-600 dark:text-gray-200 leading-relaxed whitespace-pre-wrap font-medium line-clamp-3">{entry.content}</p>
                 {entry.image && (
-                  <div className="mt-4 rounded-2xl overflow-hidden shadow-md">
-                     <img src={entry.image} alt="Diary" className="w-full h-32 object-cover" />
+                  <div className="mt-4 rounded-2xl overflow-hidden shadow-md h-32 relative">
+                     <img src={entry.image} alt="Diary" className="w-full h-full object-cover" />
+                     <div className="absolute bottom-0 left-0 w-full h-1/2 bg-gradient-to-t from-black/50 to-transparent"></div>
                   </div>
                 )}
              </div>

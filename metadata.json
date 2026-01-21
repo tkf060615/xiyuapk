@@ -2,6 +2,7 @@
   "name": "EnergyUp",
   "description": "A comprehensive Android-style app for mental and physical energy boosting. Features inspirational quotes from Chinese leaders, a mood journal, diverse mini-games (Snake, 2048, Minesweeper, etc.), and a customizable user profile system.",
   "requestFramePermissions": [
-    "camera"
+    "camera",
+    "geolocation"
   ]
 }

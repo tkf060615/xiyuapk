@@ -10,6 +10,7 @@ export interface JournalEntry {
   content: string;
   mood: number; // 1-100
   image?: string; // Base64 or URL
+  location?: string; // Geolocation string
   timestamp: number;
   dateStr: string; // YYYY-MM-DD
 }
@@ -56,7 +57,9 @@ export enum GameType {
   G2048 = '2048',
   GOMOKU = 'gomoku',
   PARKOUR = 'parkour',
-  MATCH3 = 'match3'
+  MATCH3 = 'match3',
+  WOODEN_FISH = 'wooden-fish',
+  BUBBLE_WRAP = 'bubble-wrap'
 }
 
 export interface MeditationTrack {
