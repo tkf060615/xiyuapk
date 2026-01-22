@@ -1,3 +1,4 @@
+
 import { Quote, Achievement, MeditationTrack } from './types';
 
 // Specific Leadership Quotes
@@ -105,16 +106,11 @@ export const generateQuotes = (): Quote[] => {
   });
 
   // 3. Generate General Quotes to reach ~1000
-  // We have roughly 50 unique leadership/specific quotes. We need ~950 more.
-  // We will cycle through generic quotes with slight variations or just repeats for the data structure volume.
-  // In a real app, this would be a JSON file or API.
   const targetTotal = 1000;
   let currentCount = allQuotes.length;
   
   while (currentCount < targetTotal) {
     const base = generalPositiveQuotes[Math.floor(Math.random() * generalPositiveQuotes.length)];
-    // Adding a random ID suffix logic isn't needed for display, but unique IDs are good.
-    // To make them slightly unique for "data" purposes:
     allQuotes.push({
       id: idCounter++,
       content: base,
@@ -130,11 +126,26 @@ export const generateQuotes = (): Quote[] => {
 export const INITIAL_QUOTES = generateQuotes();
 
 export const THEME_COLORS = [
-  { name: 'Red', hex: '#ef4444', tailwind: 'red-500' }, // China Red
-  { name: 'Blue', hex: '#3b82f6', tailwind: 'blue-500' },
-  { name: 'Green', hex: '#22c55e', tailwind: 'green-500' },
-  { name: 'Purple', hex: '#a855f7', tailwind: 'purple-500' },
-  { name: 'Orange', hex: '#f97316', tailwind: 'orange-500' },
+  { name: '中国红', hex: '#ef4444' },
+  { name: '经典蓝', hex: '#3b82f6' },
+  { name: '生机绿', hex: '#22c55e' },
+  { name: '灵动紫', hex: '#a855f7' },
+  { name: '活力橙', hex: '#f97316' },
+  { name: '柔美粉', hex: '#ec4899' },
+  { name: '青空蓝', hex: '#06b6d4' },
+  { name: '琥珀黄', hex: '#f59e0b' },
+  { name: '靛青色', hex: '#6366f1' },
+  { name: '松石绿', hex: '#14b8a6' },
+  { name: '玫瑰红', hex: '#f43f5e' },
+  { name: '柠檬绿', hex: '#84cc16' },
+  { name: '向日葵', hex: '#eab308' },
+  { name: '天空蓝', hex: '#0ea5e9' },
+  { name: '翡翠绿', hex: '#10b981' },
+  { name: '罗兰紫', hex: '#8b5cf6' },
+  { name: '洋红', hex: '#d946ef' },
+  { name: '石板灰', hex: '#64748b' },
+  { name: '绯红', hex: '#dc2626' },
+  { name: '青碧', hex: '#2dd4bf' },
 ];
 
 export const ACHIEVEMENTS: Achievement[] = [

@@ -5,15 +5,20 @@ import { useApp } from '../context';
 import { THEME_COLORS } from '../data';
 import { 
   ChevronLeft, Moon, Sun, Monitor, Camera, Save, User, Trash2, 
-  ShieldCheck, MapPin, Mic, FolderOpen, CheckCircle2, AlertCircle, RefreshCw
+  ShieldCheck, MapPin, Mic, FolderOpen, CheckCircle2, AlertCircle, RefreshCw, Palette,
+  ChevronRight, Info, Eye, Zap, AlertTriangle
 } from 'lucide-react';
 
 type PermissionStatus = 'granted' | 'denied' | 'prompt' | 'checking';
+type SettingsView = 'menu' | 'profile' | 'theme' | 'display' | 'permissions' | 'about';
 
 export const Settings = () => {
   const navigate = useNavigate();
   const { settings, updateSettings, user, updateUser } = useApp();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const [currentView, setCurrentView] = useState<SettingsView>('menu');
+  const [clearStep, setClearStep] = useState(0); // 0: initial, 1: confirming
 
   // Profile Form State
   const [profileForm, setProfileForm] = useState({
@@ -54,7 +59,6 @@ export const Settings = () => {
     const cam = await checkPermission('camera' as PermissionName);
     const mic = await checkPermission('microphone' as PermissionName);
     
-    // Storage status is tricky in web, we assume prompt if not explicitly used
     setPermissions({
       location: loc,
       camera: cam,
@@ -101,18 +105,26 @@ export const Settings = () => {
       bio: profileForm.bio,
       gender: profileForm.gender,
     });
-    const btn = document.getElementById('save-btn');
-    if (btn) {
-       const originalText = btn.innerText;
-       btn.innerText = '已保存!';
-       setTimeout(() => btn.innerText = originalText, 2000);
+    alert('保存成功！');
+  };
+
+  const handleClearData = () => {
+    if (clearStep === 0) {
+      setClearStep(1);
+      // 3秒后自动重置确认状态
+      setTimeout(() => setClearStep(0), 3000);
+    } else {
+      localStorage.clear();
+      window.location.reload();
     }
   };
 
-  const clearData = () => {
-    if (confirm('确定要清除所有本地数据吗？这将重置您的等级、日记和设置。此操作无法撤销。')) {
-      localStorage.clear();
-      window.location.reload();
+  const handleBack = () => {
+    if (currentView === 'menu') {
+      navigate(-1);
+    } else {
+      setCurrentView('menu');
+      setClearStep(0); // 退出关于页面时重置确认状态
     }
   };
 
@@ -137,219 +149,298 @@ export const Settings = () => {
     );
   };
 
+  const MenuItem = ({ icon: Icon, title, desc, onClick, colorClass = "text-gray-600 dark:text-gray-300", bgClass = "bg-gray-100 dark:bg-gray-800" }: any) => (
+    <button 
+      onClick={onClick}
+      className="w-full flex items-center justify-between p-4 mb-2 glass-panel rounded-2xl active:scale-[0.98] transition-all group"
+    >
+      <div className="flex items-center gap-4">
+        <div className={`${bgClass} ${colorClass} p-3 rounded-xl shadow-sm group-hover:scale-110 transition-transform`}>
+          <Icon size={20} />
+        </div>
+        <div className="text-left">
+          <p className="font-bold text-gray-800 dark:text-white text-base">{title}</p>
+          <p className="text-xs text-gray-400 font-medium">{desc}</p>
+        </div>
+      </div>
+      <ChevronRight size={20} className="text-gray-300 group-hover:text-primary transition-colors" />
+    </button>
+  );
+
   return (
-    <div className="min-h-full pb-10">
-      <div className="p-4 flex items-center sticky top-0 z-10 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md">
-        <button onClick={() => navigate(-1)} className="p-2 -ml-2 text-gray-600 dark:text-gray-300 hover:bg-black/5 rounded-full transition-colors">
+    <div className="min-h-full flex flex-col bg-slate-50 dark:bg-slate-950 pb-20">
+      {/* Dynamic Header */}
+      <div className="p-4 flex items-center sticky top-0 z-10 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-100 dark:border-gray-800">
+        <button onClick={handleBack} className="p-2 -ml-2 text-gray-600 dark:text-gray-300 hover:bg-black/5 rounded-full transition-colors">
           <ChevronLeft size={28} />
         </button>
-        <h1 className="text-xl font-bold ml-2 text-gray-800 dark:text-white">设置</h1>
+        <h1 className="text-xl font-bold ml-2 text-gray-800 dark:text-white">
+          {currentView === 'menu' ? '设置' : 
+           currentView === 'profile' ? '个人资料' :
+           currentView === 'theme' ? '应用主题' :
+           currentView === 'display' ? '显示模式' :
+           currentView === 'permissions' ? '系统权限' : '关于应用'}
+        </h1>
       </div>
 
-      <div className="p-6 space-y-8 animate-fade-in">
+      <div className="flex-1 p-6 animate-fade-in overflow-y-auto no-scrollbar">
+        {currentView === 'menu' && (
+          <div className="space-y-6">
+            <section>
+              <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2 mb-3">账号与资料</h3>
+              <MenuItem 
+                icon={User} title="个人资料" desc="修改昵称、简介和头像" 
+                onClick={() => setCurrentView('profile')} 
+                colorClass="text-blue-500" bgClass="bg-blue-50 dark:bg-blue-900/20"
+              />
+            </section>
 
-        {/* Account Settings */}
-        <section className="glass-panel p-6 rounded-3xl">
-          <div className="flex items-center gap-2 mb-6">
-             <div className="bg-primary/10 p-2 rounded-lg text-primary"><User size={20} /></div>
-             <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider">个人资料设置</h3>
+            <section>
+              <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2 mb-3">界面外观</h3>
+              <MenuItem 
+                icon={Palette} title="主题色调" desc="20种精选色调同步光感背景" 
+                onClick={() => setCurrentView('theme')} 
+                colorClass="text-primary" bgClass="bg-primary/10"
+              />
+              <MenuItem 
+                icon={Eye} title="显示模式" desc="深色模式与系统自适应" 
+                onClick={() => setCurrentView('display')} 
+                colorClass="text-purple-500" bgClass="bg-purple-50 dark:bg-purple-900/20"
+              />
+            </section>
+
+            <section>
+              <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2 mb-3">系统与安全</h3>
+              <MenuItem 
+                icon={ShieldCheck} title="系统权限" desc="地理位置、相机与文件访问" 
+                onClick={() => setCurrentView('permissions')} 
+                colorClass="text-green-500" bgClass="bg-green-50 dark:bg-green-900/20"
+              />
+              <MenuItem 
+                icon={Info} title="关于应用" desc="版本信息与数据重置" 
+                onClick={() => setCurrentView('about')} 
+                colorClass="text-orange-500" bgClass="bg-orange-50 dark:bg-orange-900/20"
+              />
+            </section>
           </div>
-          
-          <div className="flex items-start gap-4 mb-6">
-             <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-               <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-white/50 shadow-md bg-gray-200">
-                 <img src={user.avatar} className="w-full h-full object-cover" alt="avatar" />
+        )}
+
+        {/* --- DETAIL VIEWS --- */}
+
+        {currentView === 'profile' && (
+          <div className="space-y-6">
+            <div className="flex flex-col items-center mb-8">
+               <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                 <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-white dark:border-gray-800 shadow-xl bg-gray-200">
+                   <img src={user.avatar} className="w-full h-full object-cover" alt="avatar" />
+                 </div>
+                 <div className="absolute bottom-0 right-0 bg-primary text-white p-2 rounded-full shadow-lg border-2 border-white dark:border-gray-800">
+                   <Camera size={16} />
+                 </div>
+                 <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={handleAvatarChange} />
                </div>
-               <div className="absolute inset-0 bg-black/30 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                 <Camera size={20} className="text-white" />
-               </div>
-               <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={handleAvatarChange} />
-             </div>
-             
-             <div className="flex-1 space-y-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-400 ml-1">昵称</label>
-                  <input 
-                     type="text" 
-                     value={profileForm.nickname}
-                     onChange={(e) => setProfileForm({...profileForm, nickname: e.target.value})}
-                     placeholder="你的昵称"
-                     className="w-full bg-white/50 dark:bg-black/20 border border-white/40 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary text-gray-800 dark:text-white"
-                  />
-                </div>
-                <div className="flex bg-white/50 dark:bg-black/20 p-1 rounded-xl border border-white/40">
+            </div>
+            
+            <div className="space-y-4">
+              <div className="glass-panel p-4 rounded-2xl">
+                <label className="text-xs font-bold text-gray-400 ml-1">昵称</label>
+                <input 
+                   type="text" 
+                   value={profileForm.nickname}
+                   onChange={(e) => setProfileForm({...profileForm, nickname: e.target.value})}
+                   className="w-full bg-transparent border-none outline-none py-2 text-lg font-bold text-gray-800 dark:text-white"
+                />
+              </div>
+
+              <div className="glass-panel p-4 rounded-2xl">
+                <label className="text-xs font-bold text-gray-400 ml-1">性别</label>
+                <div className="flex gap-2 mt-2">
                     {(['male', 'female', 'other'] as const).map(g => (
                       <button
                         key={g}
                         onClick={() => setProfileForm({...profileForm, gender: g})}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${profileForm.gender === g ? 'bg-white shadow text-primary' : 'text-gray-400 hover:text-gray-500'}`}
+                        className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all border ${profileForm.gender === g ? 'bg-primary text-white border-primary shadow-lg' : 'bg-gray-50 dark:bg-gray-800 text-gray-400 border-transparent hover:bg-gray-100'}`}
                       >
-                        {g === 'male' ? '♂ 男' : g === 'female' ? '♀ 女' : '⚪ 其他'}
+                        {g === 'male' ? '男 ♂' : g === 'female' ? '女 ♀' : '其他 ⚪'}
                       </button>
                     ))}
                  </div>
-             </div>
-          </div>
-          
-          <div className="mb-6">
-             <label className="text-xs font-bold text-gray-400 ml-1 block mb-1">个人简介</label>
-             <textarea 
-               rows={3}
-               value={profileForm.bio}
-               onChange={(e) => setProfileForm({...profileForm, bio: e.target.value})}
-               placeholder="写一句话介绍自己..."
-               className="w-full bg-white/50 dark:bg-black/20 border border-white/40 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary text-gray-800 dark:text-white resize-none"
-             />
-           </div>
+              </div>
 
-           <button 
-             id="save-btn"
-             onClick={saveProfileSettings}
-             className="w-full py-3 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-xl font-bold text-sm shadow-lg hover:opacity-90 active:scale-95 transition-all flex items-center justify-center gap-2"
-           >
-             <Save size={18} /> 保存资料修改
-           </button>
-        </section>
+              <div className="glass-panel p-4 rounded-2xl">
+                <label className="text-xs font-bold text-gray-400 ml-1 block mb-1">个人简介</label>
+                <textarea 
+                  rows={3}
+                  value={profileForm.bio}
+                  onChange={(e) => setProfileForm({...profileForm, bio: e.target.value})}
+                  className="w-full bg-transparent border-none outline-none py-2 text-base text-gray-800 dark:text-white resize-none"
+                />
+              </div>
 
-        {/* Permissions Management */}
-        <section className="glass-panel p-6 rounded-3xl">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <div className="bg-primary/10 p-2 rounded-lg text-primary"><ShieldCheck size={20} /></div>
-              <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider">系统权限管理</h3>
-            </div>
-            <button onClick={checkAllPermissions} className="p-1.5 text-gray-400 hover:text-primary transition-colors">
-              <RefreshCw size={16} />
-            </button>
-          </div>
-
-          <div className="space-y-4">
-            {/* Location */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-500">
-                  <MapPin size={18} />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-gray-800 dark:text-gray-200">精准定位</p>
-                  <p className="text-[10px] text-gray-400">用于日记位置标注</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <StatusBadge status={permissions.location} />
-                {permissions.location !== 'granted' && (
-                  <button onClick={requestLocation} className="text-xs font-bold text-primary hover:underline">申请</button>
-                )}
-              </div>
-            </div>
-
-            {/* Camera */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center text-purple-500">
-                  <Camera size={18} />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-gray-800 dark:text-gray-200">相机权限</p>
-                  <p className="text-[10px] text-gray-400">用于拍摄日记照片</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <StatusBadge status={permissions.camera} />
-                {permissions.camera !== 'granted' && (
-                  <button onClick={() => requestMedia('camera')} className="text-xs font-bold text-primary hover:underline">申请</button>
-                )}
-              </div>
-            </div>
-
-            {/* Microphone */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-red-50 dark:bg-red-900/20 flex items-center justify-center text-red-500">
-                  <Mic size={18} />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-gray-800 dark:text-gray-200">麦克风</p>
-                  <p className="text-[10px] text-gray-400">用于语音录入</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <StatusBadge status={permissions.microphone} />
-                {permissions.microphone !== 'granted' && (
-                  <button onClick={() => requestMedia('microphone')} className="text-xs font-bold text-primary hover:underline">申请</button>
-                )}
-              </div>
-            </div>
-
-            {/* Storage */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-orange-50 dark:bg-orange-900/20 flex items-center justify-center text-orange-500">
-                  <FolderOpen size={18} />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-gray-800 dark:text-gray-200">文件与存储</p>
-                  <p className="text-[10px] text-gray-400">用于读取相册图片</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <StatusBadge status={permissions.storage} />
-                <button onClick={() => fileInputRef.current?.click()} className="text-xs font-bold text-primary hover:underline">去访问</button>
-              </div>
-            </div>
-          </div>
-        </section>
-        
-        {/* Theme Color */}
-        <section className="glass-panel p-6 rounded-3xl">
-          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">主题色调</h3>
-          <div className="flex gap-4 flex-wrap justify-between">
-            {THEME_COLORS.map((c) => (
-              <button
-                key={c.hex}
-                onClick={() => updateSettings({ themeColor: c.hex })}
-                className={`w-12 h-12 rounded-full shadow-lg flex items-center justify-center transition-transform active:scale-90 ${settings.themeColor === c.hex ? 'ring-4 ring-offset-2 ring-white/50 dark:ring-white/20 scale-110' : 'opacity-80'}`}
-                style={{ backgroundColor: c.hex }}
+              <button 
+                onClick={saveProfileSettings}
+                className="w-full py-4 bg-primary text-white rounded-2xl font-black shadow-xl shadow-primary/20 active:scale-95 transition-all mt-6 flex items-center justify-center gap-2"
               >
-                {settings.themeColor === c.hex && <div className="w-4 h-4 bg-white rounded-full shadow-sm" />}
+                <Save size={20} /> 保存修改
               </button>
+            </div>
+          </div>
+        )}
+
+        {currentView === 'theme' && (
+          <div className="space-y-8">
+            <div className="glass-panel p-6 rounded-3xl">
+              <div className="grid grid-cols-5 gap-3">
+                {THEME_COLORS.map((c) => (
+                  <div key={c.hex} className="flex flex-col items-center gap-1.5">
+                    <button
+                      onClick={() => updateSettings({ themeColor: c.hex })}
+                      className={`w-12 h-12 rounded-2xl shadow-sm flex items-center justify-center transition-all duration-300 relative ${settings.themeColor === c.hex ? 'scale-110 shadow-xl ring-4 ring-primary/20' : 'hover:scale-105 active:scale-90'}`}
+                      style={{ backgroundColor: c.hex }}
+                    >
+                      {settings.themeColor === c.hex && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="w-5 h-5 bg-white/40 rounded-full backdrop-blur-md animate-pulse flex items-center justify-center text-white">
+                                <CheckCircle2 size={12} />
+                            </div>
+                        </div>
+                      )}
+                    </button>
+                    <span className={`text-[10px] font-bold truncate w-full text-center ${settings.themeColor === c.hex ? 'text-primary' : 'text-gray-400'}`}>
+                      {c.name}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            <div className="bg-primary/10 p-6 rounded-3xl border border-primary/20">
+               <div className="flex items-center gap-3 mb-3 text-primary">
+                  <RefreshCw size={20} className="animate-spin" style={{ animationDuration: '3s' }} />
+                  <span className="font-bold">实时同步技术</span>
+               </div>
+               <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed font-medium">
+                  您的选择将瞬间应用至全局：导航栏发光、页面背景呼吸灯效、按钮阴影及所有强调文本色。
+               </p>
+            </div>
+          </div>
+        )}
+
+        {currentView === 'display' && (
+          <div className="space-y-6">
+            <div className="glass-panel p-2 rounded-3xl flex h-20 relative">
+               <div 
+                 className="absolute top-2 bottom-2 w-[31.5%] bg-primary text-white rounded-2xl shadow-lg transition-all duration-500 ease-out"
+                 style={{ 
+                   left: settings.darkMode === 'light' ? '1.5%' : settings.darkMode === 'dark' ? '34.25%' : '67%' 
+                 }}
+               />
+               <button onClick={() => updateSettings({ darkMode: 'light' })} className={`flex-1 relative z-10 flex flex-col items-center justify-center gap-1 transition-colors ${settings.darkMode === 'light' ? 'text-white' : 'text-gray-400'}`}>
+                  <Sun size={20} /> <span className="text-xs font-bold">浅色</span>
+               </button>
+               <button onClick={() => updateSettings({ darkMode: 'dark' })} className={`flex-1 relative z-10 flex flex-col items-center justify-center gap-1 transition-colors ${settings.darkMode === 'dark' ? 'text-white' : 'text-gray-400'}`}>
+                  <Moon size={20} /> <span className="text-xs font-bold">深色</span>
+               </button>
+               <button onClick={() => updateSettings({ darkMode: 'system' })} className={`flex-1 relative z-10 flex flex-col items-center justify-center gap-1 transition-colors ${settings.darkMode === 'system' ? 'text-white' : 'text-gray-400'}`}>
+                  <Monitor size={20} /> <span className="text-xs font-bold">跟随系统</span>
+               </button>
+            </div>
+
+            <div className="p-6 glass-panel rounded-3xl flex items-center gap-4">
+               <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-500 rounded-xl">
+                  <Sun size={24} />
+               </div>
+               <div>
+                  <h4 className="font-bold text-gray-800 dark:text-white">护眼建议</h4>
+                  <p className="text-xs text-gray-400 font-medium">在光线不足的环境下，推荐开启深色模式以保护您的视力。</p>
+               </div>
+            </div>
+          </div>
+        )}
+
+        {currentView === 'permissions' && (
+          <div className="space-y-4">
+            <div className="flex justify-between items-center px-2 mb-2">
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">权限列表</span>
+              <button onClick={checkAllPermissions} className="text-xs text-primary font-bold flex items-center gap-1"><RefreshCw size={12}/> 刷新状态</button>
+            </div>
+
+            {[
+              { id: 'location', title: '精准定位', desc: '用于日记位置标注', icon: MapPin, color: 'text-blue-500', bg: 'bg-blue-50', request: requestLocation },
+              { id: 'camera', title: '相机权限', desc: '用于拍摄日记照片', icon: Camera, color: 'text-purple-500', bg: 'bg-purple-50', request: () => requestMedia('camera') },
+              { id: 'microphone', title: '麦克风', desc: '用于录制语音日记', icon: Mic, color: 'text-red-500', bg: 'bg-red-50', request: () => requestMedia('microphone') },
+              { id: 'storage', title: '文件与存储', desc: '用于读取相册图片', icon: FolderOpen, color: 'text-orange-500', bg: 'bg-orange-50', request: () => fileInputRef.current?.click() },
+            ].map(p => (
+              <div key={p.id} className="flex items-center justify-between p-4 glass-panel rounded-2xl">
+                <div className="flex items-center gap-4">
+                  <div className={`w-10 h-10 rounded-xl ${p.bg} dark:bg-opacity-10 flex items-center justify-center ${p.color}`}>
+                    <p.icon size={20} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-gray-800 dark:text-gray-200">{p.title}</p>
+                    <p className="text-[10px] text-gray-400">{p.desc}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <StatusBadge status={permissions[p.id]} />
+                  {permissions[p.id] !== 'granted' && (
+                    <button onClick={p.request} className="text-xs font-black text-primary px-3 py-1 bg-primary/10 rounded-lg active:scale-90 transition-transform">申请</button>
+                  )}
+                </div>
+              </div>
             ))}
           </div>
-        </section>
+        )}
 
-        {/* Dark Mode */}
-        <section className="glass-panel p-6 rounded-3xl">
-          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">显示模式</h3>
-          <div className="bg-gray-100 dark:bg-black/20 p-1.5 rounded-2xl flex relative">
-             <div 
-               className="absolute top-1.5 bottom-1.5 w-[31%] bg-white dark:bg-gray-700 rounded-xl shadow-md transition-all duration-300 ease-in-out"
-               style={{ 
-                 left: settings.darkMode === 'light' ? '1.5%' : settings.darkMode === 'dark' ? '34.5%' : '67.5%' 
-               }}
-             />
-             <button onClick={() => updateSettings({ darkMode: 'light' })} className={`flex-1 relative z-10 py-3 rounded-xl flex flex-col items-center justify-center gap-1 transition-colors ${settings.darkMode === 'light' ? 'text-primary' : 'text-gray-400'}`}>
-                <Sun size={20} /> <span className="text-[10px] font-bold">浅色</span>
-             </button>
-             <button onClick={() => updateSettings({ darkMode: 'dark' })} className={`flex-1 relative z-10 py-3 rounded-xl flex flex-col items-center justify-center gap-1 transition-colors ${settings.darkMode === 'dark' ? 'text-primary' : 'text-gray-400'}`}>
-                <Moon size={20} /> <span className="text-[10px] font-bold">深色</span>
-             </button>
-             <button onClick={() => updateSettings({ darkMode: 'system' })} className={`flex-1 relative z-10 py-3 rounded-xl flex flex-col items-center justify-center gap-1 transition-colors ${settings.darkMode === 'system' ? 'text-primary' : 'text-gray-400'}`}>
-                <Monitor size={20} /> <span className="text-[10px] font-bold">跟随系统</span>
-             </button>
+        {currentView === 'about' && (
+          <div className="space-y-8">
+            <div className="flex flex-col items-center py-6">
+               <div className="w-20 h-20 bg-primary rounded-[2rem] flex items-center justify-center text-white shadow-2xl shadow-primary/30 mb-4 animate-float">
+                  <Zap size={40} fill="currentColor" />
+               </div>
+               <h2 className="text-2xl font-black text-gray-800 dark:text-white">EnergyUp</h2>
+               <p className="text-xs text-gray-400 font-bold tracking-widest uppercase mt-1">Version 1.2.0 • Android Edition</p>
+            </div>
+
+            <div className="glass-panel p-6 rounded-3xl space-y-4">
+               <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500 font-medium">开发者</span>
+                  <span className="font-bold text-gray-800 dark:text-gray-200">Casper Tien</span>
+               </div>
+               <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500 font-medium">隐私政策</span>
+                  <span className="text-primary font-bold">查看详情</span>
+               </div>
+               <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500 font-medium">检查更新</span>
+                  <span className="text-green-500 font-bold">已是最新版本</span>
+               </div>
+            </div>
+
+            <div className="pt-12 space-y-4">
+              <button 
+                onClick={handleClearData}
+                className={`w-full py-4 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 border shadow-lg active:scale-95
+                  ${clearStep === 0 
+                    ? 'text-red-500 bg-red-50 hover:bg-red-100 border-red-100 dark:bg-red-900/10 dark:border-red-900/20' 
+                    : 'text-white bg-red-600 border-red-600 animate-pulse'
+                  }
+                `}
+              >
+                {clearStep === 0 ? (
+                  <><Trash2 size={16} /> 清除数据并重置应用</>
+                ) : (
+                  <><AlertTriangle size={18} /> 再次点击以确认 (不可撤销)</>
+                )}
+              </button>
+              {clearStep === 1 && (
+                <p className="text-center text-[10px] text-red-500 font-bold animate-fade-in">
+                  注意：这将永久删除您的所有打卡记录、日记和等级进度。
+                </p>
+              )}
+            </div>
           </div>
-        </section>
-
-        {/* Danger Zone */}
-        <section className="pt-4">
-           <button 
-             onClick={clearData}
-             className="w-full py-3 text-red-500 bg-red-50 hover:bg-red-100 dark:bg-red-900/10 dark:hover:bg-red-900/20 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2"
-           >
-             <Trash2 size={16} /> 清除所有数据 (重置应用)
-           </button>
-           <p className="text-center text-xs text-gray-400 mt-2">EnergyUp v1.0.0</p>
-        </section>
-
+        )}
       </div>
     </div>
   );
