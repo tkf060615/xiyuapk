@@ -220,32 +220,53 @@ export const Profile = () => {
 
     const width = 1000;
     const height = 300;
-    const padding = 20;
-    const availableWidth = width - padding * 2;
-    const availableHeight = height - padding * 2;
+    const paddingLeft = 80; // 增加左边距容纳 Y 轴刻度
+    const paddingRight = 40;
+    const paddingTop = 20;
+    const paddingBottom = 40;
+    const availableWidth = width - paddingLeft - paddingRight;
+    const availableHeight = height - paddingTop - paddingBottom;
 
     const points = chartData.map((d, i) => {
-        const x = padding + (i / (chartData.length - 1)) * availableWidth;
-        const y = padding + availableHeight - (d.value / 100) * availableHeight;
+        const x = paddingLeft + (i / (chartData.length - 1)) * availableWidth;
+        const y = paddingTop + availableHeight - (d.value / 100) * availableHeight;
         return { x, y, value: d.value, label: d.label };
     });
 
     const pathD = points.map((p, i) => (i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`)).join(' ');
-    const areaD = `${pathD} L ${points[points.length-1].x} ${height} L ${points[0].x} ${height} Z`;
+    const areaD = `${pathD} L ${points[points.length-1].x} ${paddingTop + availableHeight} L ${points[0].x} ${paddingTop + availableHeight} Z`;
 
     return (
-        <svg viewBox={`0 0 ${width} ${height + 30}`} className="w-full h-full">
+        <svg viewBox={`0 0 ${width} ${height + 20}`} className="w-full h-full overflow-visible">
             <defs>
                 <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="var(--primary-color)" stopOpacity="0.4" />
                     <stop offset="100%" stopColor="var(--primary-color)" stopOpacity="0" />
                 </linearGradient>
             </defs>
-            <line x1={padding} y1={padding + availableHeight} x2={width - padding} y2={padding + availableHeight} stroke="gray" strokeOpacity="0.1" strokeDasharray="5,5" />
-            <line x1={padding} y1={padding + availableHeight/2} x2={width - padding} y2={padding + availableHeight/2} stroke="gray" strokeOpacity="0.1" strokeDasharray="5,5" />
-            <line x1={padding} y1={padding} x2={width - padding} y2={padding} stroke="gray" strokeOpacity="0.1" strokeDasharray="5,5" />
+            
+            {/* 网格线 & Y 轴刻度 (纵向刻度) */}
+            <g>
+                {[0, 25, 50, 75, 100].map(val => {
+                    const y = paddingTop + availableHeight - (val / 100) * availableHeight;
+                    return (
+                        <React.Fragment key={val}>
+                            <line x1={paddingLeft} y1={y} x2={width - paddingRight} y2={y} stroke="gray" strokeOpacity="0.1" strokeDasharray="5,5" />
+                            <text x={paddingLeft - 15} y={y} dy="0.32em" textAnchor="end" fill="gray" fontSize="22" fontWeight="bold" opacity="0.6">
+                                {val}
+                            </text>
+                        </React.Fragment>
+                    );
+                })}
+            </g>
+
+            {/* 渐变填充 */}
             <path d={areaD} fill="url(#chartGradient)" />
+            
+            {/* 曲线 */}
             <path d={pathD} fill="none" stroke="var(--primary-color)" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
+            
+            {/* 数据点 & X 轴标签 (横向标签) */}
             {points.map((p, i) => (
                 <g key={i}>
                     {p.value > 0 && (
@@ -254,7 +275,7 @@ export const Profile = () => {
                     {(chartRange === 'week' || chartRange === 'year' || i % 5 === 0 || i === points.length - 1) && (
                         <text 
                             x={p.x} 
-                            y={height + 25} 
+                            y={height} 
                             textAnchor="middle" 
                             fill="gray" 
                             fontSize="24" 
@@ -447,7 +468,7 @@ export const Profile = () => {
       {/* --- MOOD CHART SECTION --- */}
       <div className="px-6 mt-6 animate-fade-in" style={{ animationDelay: '100ms' }}>
          <div className="glass-panel rounded-[2rem] p-5">
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex justify-between items-center mb-6">
                 <div className="flex items-center gap-2 text-gray-800 dark:text-white font-bold">
                     <Activity size={20} className="text-primary" />
                     <span>心情曲线</span>
@@ -469,14 +490,8 @@ export const Profile = () => {
                 </div>
             </div>
             
-            <div className="w-full h-40">
+            <div className="w-full h-48 px-2">
                 {renderChart()}
-            </div>
-            
-            <div className="flex justify-between mt-2 text-[10px] text-gray-400 font-medium px-1">
-                <span>0</span>
-                <span>50</span>
-                <span>100</span>
             </div>
          </div>
       </div>

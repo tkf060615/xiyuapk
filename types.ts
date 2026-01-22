@@ -64,7 +64,8 @@ export enum GameType {
   MATCH3 = 'match3',
   WOODEN_FISH = 'wooden-fish',
   BUBBLE_WRAP = 'bubble-wrap',
-  TETRIS = 'tetris'
+  TETRIS = 'tetris',
+  KLOTSKI = 'klotski'
 }
 
 export interface MeditationTrack {

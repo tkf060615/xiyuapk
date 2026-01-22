@@ -1,7 +1,7 @@
 
 import { Quote, Achievement, MeditationTrack } from './types';
 
-// Specific Leadership Quotes
+// Specific Leadership Quotes - Xi Jinping
 const xiJinpingQuotes = [
   "人民对美好生活的向往，就是我们的奋斗目标。",
   "绿水青山就是金山银山。",
@@ -32,10 +32,15 @@ const xiJinpingQuotes = [
   "要立志做大事，不要立志做大官。",
   "机遇紧紧掌握在自己手中。",
   "每一代人有每一代人的长征路，每一代人都要走好自己的长征路。",
-  "只有敢于走别人没有走过的路，才能收获别样的风景。",
+  "只有敢于走别人没有走过的路，才能收获变样的风景。",
+  "星光不负赶路人，江河眷顾奋楫者。",
+  "道阻且长，行则将至。",
+  "民之所忧，我必念之；民之所盼，我必行之。"
 ];
 
+// Expanded Other Leaders Quotes
 const otherLeadersQuotes = [
+  // 毛泽东
   { content: "为人民服务。", author: "毛泽东" },
   { content: "好好学习，天天向上。", author: "毛泽东" },
   { content: "星星之火，可以燎原。", author: "毛泽东" },
@@ -44,18 +49,33 @@ const otherLeadersQuotes = [
   { content: "雄关漫道真如铁，而今迈步从头越。", author: "毛泽东" },
   { content: "一万年太久，只争朝夕。", author: "毛泽东" },
   { content: "数风流人物，还看今朝。", author: "毛泽东" },
+  { content: "自己动手，丰衣足食。", author: "毛泽东" },
+  { content: "不到长城非好汉。", author: "毛泽东" },
+  { content: "没有调查，就没有发言权。", author: "毛泽东" },
+  
+  // 邓小平
   { content: "发展才是硬道理。", author: "邓小平" },
   { content: "不管白猫黑猫，捉到老鼠就是好猫。", author: "邓小平" },
   { content: "科学技术是第一生产力。", author: "邓小平" },
   { content: "解放思想，实事求是。", author: "邓小平" },
   { content: "改革是中国的第二次革命。", author: "邓小平" },
   { content: "尊重知识，尊重人才。", author: "邓小平" },
-  { content: "苟利国家生死以，岂因祸福避趋之。", author: "林则徐" },
-  { content: "先天下之忧而忧，后天下之乐而乐。", author: "范仲淹" },
-  { content: "天行健，君子以自强不息。", author: "周易" },
-  { content: "地势坤，君子以厚德载物。", author: "周易" },
-  { content: "鞠躬尽瘁，死而后已。", author: "诸葛亮" },
-  { content: "为中华之崛起而读书。", author: "周恩来" }
+  { content: "改革开放胆子要大一些。", author: "邓小平" },
+  { content: "基本路线要管一百年，动摇不得。", author: "邓小平" },
+
+  // 江泽民
+  { content: "创新是一个民族进步的灵魂，是一个国家兴旺发达的不竭动力。", author: "江泽民" },
+  { content: "与时俱进。", author: "江泽民" },
+  { content: "讲学习，讲政治，讲正气。", author: "江泽民" },
+  { content: "始终做到代表中国先进社会生产力的发展要求、代表中国先进文化的前进方向、代表中国最广大人民的根本利益。", author: "江泽民" },
+  { content: "人才是经济社会发展的第一资源。", author: "江泽民" },
+
+  // 胡锦涛
+  { content: "不动摇、不懈怠、不折腾。", author: "胡锦涛" },
+  { content: "权为民所用，情为民所系，利为民所谋。", author: "胡锦涛" },
+  { content: "以人为本。", author: "胡锦涛" },
+  { content: "构建社会主义和谐社会。", author: "胡锦涛" },
+  { content: "聚精会神搞建设，一心一意谋发展。", author: "胡锦涛" }
 ];
 
 const generalPositiveQuotes = [
@@ -65,7 +85,6 @@ const generalPositiveQuotes = [
   "生活原本沉闷，但跑起来就有风。",
   "坚持就是胜利。",
   "种一棵树最好的时间是十年前，其次是现在。",
-  "不仅要仰望星空，更要脚踏实地。",
   "你的努力，终将获得回报。",
   "保持热爱，奔赴山海。",
   "即使在缝隙中，也要开出最美的花。",
@@ -97,12 +116,12 @@ export const generateQuotes = (): Quote[] => {
 
   // 1. Add Xi Jinping Quotes
   xiJinpingQuotes.forEach(q => {
-    allQuotes.push({ id: idCounter++, content: q, author: "习近平", category: 'leadership' });
+    allQuotes.push({ id: idCounter++, content: q, author: "习近平", category: 'leadership_xi' });
   });
 
   // 2. Add Other Leaders
   otherLeadersQuotes.forEach(q => {
-    allQuotes.push({ id: idCounter++, ...q, category: 'leadership' });
+    allQuotes.push({ id: idCounter++, ...q, category: 'leadership_other' });
   });
 
   // 3. Generate General Quotes to reach ~1000

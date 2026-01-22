@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Play, Pause, X, Music, Clock, Infinity as InfinityIcon, Wind, Square } from 'lucide-react';
 import { MEDITATION_TRACKS } from '../data';
@@ -394,7 +395,8 @@ export const Meditation = () => {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="p-6 pt-8">
+      {/* 统一标题栏 */}
+      <div className="px-6 pt-10 pb-4 shrink-0">
         <h1 className="text-3xl font-bold text-gray-800 dark:text-white drop-shadow-sm">冥想与呼吸</h1>
         <p className="text-gray-500 dark:text-gray-300 mt-1 font-medium">让心灵回归宁静</p>
       </div>

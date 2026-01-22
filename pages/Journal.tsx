@@ -256,7 +256,7 @@ export const Journal = () => {
   if (isWriting) {
     return (
       <div className="fixed inset-0 z-[100] flex flex-col p-6 animate-fade-in bg-white/95 dark:bg-slate-950/95 backdrop-blur-xl overflow-y-auto">
-        <div className="flex justify-between items-center mb-6 shrink-0">
+        <div className="flex justify-between items-center mb-6 shrink-0 pt-4">
           <button onClick={() => { setIsWriting(false); setEditingId(null); }} className="text-gray-500 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
             <X size={24} />
           </button>
@@ -384,7 +384,7 @@ export const Journal = () => {
     return (
       <div className="fixed inset-0 z-[60] bg-white dark:bg-slate-950 overflow-y-auto animate-fade-in flex flex-col">
         {/* Detail Header */}
-        <div className="sticky top-0 p-4 flex justify-between items-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-md z-10 border-b border-gray-100 dark:border-gray-800">
+        <div className="sticky top-0 p-4 flex justify-between items-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-md z-10 border-b border-gray-100 dark:border-gray-800 pt-8">
            <button onClick={() => setSelectedEntry(null)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
               <X size={24} className="text-gray-600 dark:text-gray-300" />
            </button>
@@ -487,8 +487,9 @@ export const Journal = () => {
 
   // --- LIST VIEW ---
   return (
-    <div className="min-h-full p-6">
-      <div className="flex justify-between items-end mb-8 pt-8">
+    <div className="min-h-full flex flex-col">
+      {/* 统一标题栏 */}
+      <div className="px-6 pt-10 pb-4 flex justify-between items-end shrink-0">
         <div>
            <h1 className="text-3xl font-bold text-gray-800 dark:text-white drop-shadow-sm">日记</h1>
            <p className="text-gray-500 dark:text-gray-300 mt-1 font-medium">记录每一份感动</p>
@@ -501,46 +502,48 @@ export const Journal = () => {
         </button>
       </div>
 
-      {journal.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-[50vh] text-gray-400">
-          <p className="font-medium">还没有日记，快去写一篇吧~</p>
-        </div>
-      ) : (
-        <div className="space-y-6 pb-20">
-          {journal.map((entry, idx) => (
-             <div 
-               key={entry.id} 
-               onClick={() => setSelectedEntry(entry)}
-               className="glass-card p-6 rounded-[2rem] hover:shadow-xl transition-all cursor-pointer animate-fade-in hover:scale-[1.02]"
-               style={{ animationDelay: `${idx * 100}ms` }}
-             >
-                <div className="flex justify-between items-center mb-3">
-                  <div className="flex flex-col">
-                    <span className="font-bold text-xl text-gray-800 dark:text-gray-100">{entry.dateStr.split('/')[2] || entry.dateStr.slice(-2)}日</span>
-                    <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-400 font-bold">{entry.dateStr}</span>
-                        {entry.location && <span className="text-[10px] text-blue-400 flex items-center gap-0.5 bg-blue-50 px-1.5 py-0.5 rounded"><MapPin size={10} />{entry.location}</span>}
+      <div className="px-6 flex-1">
+        {journal.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-[50vh] text-gray-400">
+            <p className="font-medium">还没有日记，快去写一篇吧~</p>
+          </div>
+        ) : (
+          <div className="space-y-6 pb-24">
+            {journal.map((entry, idx) => (
+               <div 
+                 key={entry.id} 
+                 onClick={() => setSelectedEntry(entry)}
+                 className="glass-card p-6 rounded-[2rem] hover:shadow-xl transition-all cursor-pointer animate-fade-in hover:scale-[1.02]"
+                 style={{ animationDelay: `${idx * 100}ms` }}
+               >
+                  <div className="flex justify-between items-center mb-3">
+                    <div className="flex flex-col">
+                      <span className="font-bold text-xl text-gray-800 dark:text-gray-100">{entry.dateStr.split('/')[2] || entry.dateStr.slice(-2)}日</span>
+                      <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-400 font-bold">{entry.dateStr}</span>
+                          {entry.location && <span className="text-[10px] text-blue-400 flex items-center gap-0.5 bg-blue-50 px-1.5 py-0.5 rounded"><MapPin size={10} />{entry.location}</span>}
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      {entry.audio && <Mic size={14} className="text-primary animate-pulse" />}
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold border ${entry.mood > 80 ? 'bg-green-100/50 text-green-700 border-green-200' : entry.mood > 40 ? 'bg-blue-100/50 text-blue-700 border-blue-200' : 'bg-gray-100/50 text-gray-700 border-gray-200'}`}>
+                        {entry.mood > 80 ? '😆 开心' : entry.mood > 40 ? '🙂 平静' : '😔 低落'}
+                      </span>
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    {entry.audio && <Mic size={14} className="text-primary animate-pulse" />}
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold border ${entry.mood > 80 ? 'bg-green-100/50 text-green-700 border-green-200' : entry.mood > 40 ? 'bg-blue-100/50 text-blue-700 border-blue-200' : 'bg-gray-100/50 text-gray-700 border-gray-200'}`}>
-                      {entry.mood > 80 ? '😆 开心' : entry.mood > 40 ? '🙂 平静' : '😔 低落'}
-                    </span>
-                  </div>
-                </div>
-                <p className="text-gray-600 dark:text-gray-200 leading-relaxed whitespace-pre-wrap font-medium line-clamp-3">
-                    {entry.content || (entry.audio ? "语音日记" : "")}
-                </p>
-                {entry.image && (
-                  <div className="mt-4 rounded-2xl overflow-hidden shadow-md h-32 relative">
-                     <img src={entry.image} alt="Diary" className="w-full h-full object-cover" />
-                  </div>
-                )}
-             </div>
-          ))}
-        </div>
-      )}
+                  <p className="text-gray-600 dark:text-gray-200 leading-relaxed whitespace-pre-wrap font-medium line-clamp-3">
+                      {entry.content || (entry.audio ? "语音日记" : "")}
+                  </p>
+                  {entry.image && (
+                    <div className="mt-4 rounded-2xl overflow-hidden shadow-md h-32 relative">
+                       <img src={entry.image} alt="Diary" className="w-full h-full object-cover" />
+                    </div>
+                  )}
+               </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
