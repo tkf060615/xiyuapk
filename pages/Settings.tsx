@@ -1,19 +1,33 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context';
 import { THEME_COLORS } from '../data';
-import { ChevronLeft, Moon, Sun, Monitor, Camera, Save, User, Trash2 } from 'lucide-react';
+import { 
+  ChevronLeft, Moon, Sun, Monitor, Camera, Save, User, Trash2, 
+  ShieldCheck, MapPin, Mic, FolderOpen, CheckCircle2, AlertCircle, RefreshCw
+} from 'lucide-react';
+
+type PermissionStatus = 'granted' | 'denied' | 'prompt' | 'checking';
 
 export const Settings = () => {
   const navigate = useNavigate();
   const { settings, updateSettings, user, updateUser } = useApp();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Local state for profile editing within settings
+  // Profile Form State
   const [profileForm, setProfileForm] = useState({
     nickname: '',
     bio: '',
     gender: 'male' as 'male' | 'female' | 'other',
+  });
+
+  // Permissions State
+  const [permissions, setPermissions] = useState<Record<string, PermissionStatus>>({
+    location: 'checking',
+    camera: 'checking',
+    microphone: 'checking',
+    storage: 'checking'
   });
 
   // Sync with current user data on load
@@ -23,7 +37,51 @@ export const Settings = () => {
       bio: user.bio,
       gender: user.gender,
     });
+    checkAllPermissions();
   }, [user]);
+
+  const checkPermission = async (name: PermissionName): Promise<PermissionStatus> => {
+    try {
+      const result = await navigator.permissions.query({ name });
+      return result.state;
+    } catch (e) {
+      return 'prompt';
+    }
+  };
+
+  const checkAllPermissions = async () => {
+    const loc = await checkPermission('geolocation' as PermissionName);
+    const cam = await checkPermission('camera' as PermissionName);
+    const mic = await checkPermission('microphone' as PermissionName);
+    
+    // Storage status is tricky in web, we assume prompt if not explicitly used
+    setPermissions({
+      location: loc,
+      camera: cam,
+      microphone: mic,
+      storage: 'prompt' 
+    });
+  };
+
+  const requestLocation = () => {
+    navigator.geolocation.getCurrentPosition(
+      () => { setPermissions(prev => ({ ...prev, location: 'granted' })); },
+      () => { setPermissions(prev => ({ ...prev, location: 'denied' })); }
+    );
+  };
+
+  const requestMedia = async (type: 'camera' | 'microphone') => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: type === 'camera', 
+        audio: type === 'microphone' 
+      });
+      stream.getTracks().forEach(track => track.stop());
+      setPermissions(prev => ({ ...prev, [type]: 'granted' }));
+    } catch (err) {
+      setPermissions(prev => ({ ...prev, [type]: 'denied' }));
+    }
+  };
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -31,6 +89,7 @@ export const Settings = () => {
       const reader = new FileReader();
       reader.onloadend = () => {
         updateUser({ avatar: reader.result as string });
+        setPermissions(prev => ({ ...prev, storage: 'granted' }));
       };
       reader.readAsDataURL(file);
     }
@@ -42,7 +101,6 @@ export const Settings = () => {
       bio: profileForm.bio,
       gender: profileForm.gender,
     });
-    // Visual feedback
     const btn = document.getElementById('save-btn');
     if (btn) {
        const originalText = btn.innerText;
@@ -56,6 +114,27 @@ export const Settings = () => {
       localStorage.clear();
       window.location.reload();
     }
+  };
+
+  const StatusBadge = ({ status }: { status: PermissionStatus }) => {
+    if (status === 'granted') return (
+      <span className="flex items-center gap-1 text-[10px] font-bold text-green-500 bg-green-50 dark:bg-green-900/20 px-2 py-0.5 rounded-full">
+        <CheckCircle2 size={10} /> 已授权
+      </span>
+    );
+    if (status === 'denied') return (
+      <span className="flex items-center gap-1 text-[10px] font-bold text-red-500 bg-red-50 dark:bg-red-900/20 px-2 py-0.5 rounded-full">
+        <AlertCircle size={10} /> 已拒绝
+      </span>
+    );
+    if (status === 'checking') return (
+        <span className="text-[10px] font-bold text-gray-400 animate-pulse">检测中...</span>
+    );
+    return (
+      <span className="text-[10px] font-bold text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full">
+        待申请
+      </span>
+    );
   };
 
   return (
@@ -99,17 +178,13 @@ export const Settings = () => {
                   />
                 </div>
                 <div className="flex bg-white/50 dark:bg-black/20 p-1 rounded-xl border border-white/40">
-                    {[
-                      { id: 'male', label: '♂ 男' },
-                      { id: 'female', label: '♀ 女' },
-                      { id: 'other', label: '⚪ 其他' }
-                    ].map(g => (
+                    {(['male', 'female', 'other'] as const).map(g => (
                       <button
-                        key={g.id}
-                        onClick={() => setProfileForm({...profileForm, gender: g.id as any})}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${profileForm.gender === g.id ? 'bg-white shadow text-primary' : 'text-gray-400 hover:text-gray-500'}`}
+                        key={g}
+                        onClick={() => setProfileForm({...profileForm, gender: g})}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${profileForm.gender === g ? 'bg-white shadow text-primary' : 'text-gray-400 hover:text-gray-500'}`}
                       >
-                        {g.label}
+                        {g === 'male' ? '♂ 男' : g === 'female' ? '♀ 女' : '⚪ 其他'}
                       </button>
                     ))}
                  </div>
@@ -134,6 +209,95 @@ export const Settings = () => {
            >
              <Save size={18} /> 保存资料修改
            </button>
+        </section>
+
+        {/* Permissions Management */}
+        <section className="glass-panel p-6 rounded-3xl">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className="bg-primary/10 p-2 rounded-lg text-primary"><ShieldCheck size={20} /></div>
+              <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider">系统权限管理</h3>
+            </div>
+            <button onClick={checkAllPermissions} className="p-1.5 text-gray-400 hover:text-primary transition-colors">
+              <RefreshCw size={16} />
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            {/* Location */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-500">
+                  <MapPin size={18} />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-gray-800 dark:text-gray-200">精准定位</p>
+                  <p className="text-[10px] text-gray-400">用于日记位置标注</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <StatusBadge status={permissions.location} />
+                {permissions.location !== 'granted' && (
+                  <button onClick={requestLocation} className="text-xs font-bold text-primary hover:underline">申请</button>
+                )}
+              </div>
+            </div>
+
+            {/* Camera */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center text-purple-500">
+                  <Camera size={18} />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-gray-800 dark:text-gray-200">相机权限</p>
+                  <p className="text-[10px] text-gray-400">用于拍摄日记照片</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <StatusBadge status={permissions.camera} />
+                {permissions.camera !== 'granted' && (
+                  <button onClick={() => requestMedia('camera')} className="text-xs font-bold text-primary hover:underline">申请</button>
+                )}
+              </div>
+            </div>
+
+            {/* Microphone */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-red-50 dark:bg-red-900/20 flex items-center justify-center text-red-500">
+                  <Mic size={18} />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-gray-800 dark:text-gray-200">麦克风</p>
+                  <p className="text-[10px] text-gray-400">用于语音录入</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <StatusBadge status={permissions.microphone} />
+                {permissions.microphone !== 'granted' && (
+                  <button onClick={() => requestMedia('microphone')} className="text-xs font-bold text-primary hover:underline">申请</button>
+                )}
+              </div>
+            </div>
+
+            {/* Storage */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-orange-50 dark:bg-orange-900/20 flex items-center justify-center text-orange-500">
+                  <FolderOpen size={18} />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-gray-800 dark:text-gray-200">文件与存储</p>
+                  <p className="text-[10px] text-gray-400">用于读取相册图片</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <StatusBadge status={permissions.storage} />
+                <button onClick={() => fileInputRef.current?.click()} className="text-xs font-bold text-primary hover:underline">去访问</button>
+              </div>
+            </div>
+          </div>
         </section>
         
         {/* Theme Color */}

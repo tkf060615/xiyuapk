@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { UserProfile, JournalEntry, AppSettings, Quote, Achievement, UserStats } from './types';
 import { THEME_COLORS, ACHIEVEMENTS } from './data';
@@ -24,6 +25,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const DEFAULT_STATS: UserStats = {
   loginStreak: 0,
   lastLoginDate: '',
+  checkInHistory: [],
   totalCheckIns: 0,
   totalJournalEntries: 0,
   totalQuotesLiked: 0,
@@ -57,6 +59,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     // Ensure stats structure exists if loading from old version
     if (!loadedUser.stats) loadedUser.stats = DEFAULT_STATS;
     if (loadedUser.stats.totalCheckIns === undefined) loadedUser.stats.totalCheckIns = loadedUser.stats.loginStreak || 0;
+    if (loadedUser.stats.checkInHistory === undefined) loadedUser.stats.checkInHistory = [];
     if (!loadedUser.nextLevelExp) loadedUser.nextLevelExp = 100 * loadedUser.level;
     if (!loadedUser.unlockedAchievements) loadedUser.unlockedAchievements = [];
     return loadedUser;
@@ -160,6 +163,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const lastCheckIn = prev.stats.lastLoginDate;
       let newStreak = prev.stats.loginStreak;
       let total = prev.stats.totalCheckIns || 0;
+      let history = prev.stats.checkInHistory || [];
 
       // Logic for streak
       const yesterday = new Date();
@@ -172,13 +176,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
          newStreak = 1; // Reset streak if missed a day, or first login
       }
       
+      // Update history if not already present
+      if (!history.includes(today)) {
+        history = [...history, today];
+      }
+
       const updatedUser = { 
         ...prev, 
         stats: { 
           ...prev.stats, 
           loginStreak: newStreak, 
           totalCheckIns: total + 1,
-          lastLoginDate: today 
+          lastLoginDate: today,
+          checkInHistory: history
         } 
       };
       setTimeout(() => checkAchievements(updatedUser), 100); 

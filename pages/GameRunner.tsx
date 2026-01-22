@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { GameType } from '../types';
 import { useApp } from '../context';
-import { ChevronLeft, RefreshCw, Flag, AlertTriangle, Skull, Trophy, Play, Pause, Activity, Hash, Grid3X3, Bomb, HelpCircle, Volume2, VolumeX, X, Rocket, Sparkles, RotateCcw, Frown, Music, CircleDashed } from 'lucide-react';
+import { ChevronLeft, RefreshCw, Flag, AlertTriangle, Skull, Trophy, Play, Pause, Activity, Hash, Grid3X3, Bomb, HelpCircle, Volume2, VolumeX, X, Rocket, Sparkles, RotateCcw, Frown, Music, CircleDashed, LayoutGrid } from 'lucide-react';
 
 // --- SOUND ENGINE ---
 const SoundSynthesizer = {
@@ -95,7 +95,7 @@ const SoundSynthesizer = {
         osc.start(now);
         osc.stop(now + 0.5);
         break;
-      case 'wood': // Wooden Fish Sound
+      case 'wood':
         osc.type = 'sine';
         osc.frequency.setValueAtTime(800, now);
         osc.frequency.exponentialRampToValueAtTime(400, now + 0.08);
@@ -104,7 +104,7 @@ const SoundSynthesizer = {
         osc.start(now);
         osc.stop(now + 0.15);
         break;
-      case 'pop': // Bubble Pop Sound
+      case 'pop':
         osc.type = 'triangle';
         osc.frequency.setValueAtTime(1200, now);
         osc.frequency.exponentialRampToValueAtTime(100, now + 0.05);
@@ -170,6 +170,10 @@ const GAME_TUTORIALS: Record<string, { title: string, content: string }> = {
   [GameType.BUBBLE_WRAP]: {
     title: '捏泡泡玩法',
     content: '点击泡泡即可“捏破”它，享受解压的音效和触感。点击重置按钮可以恢复所有泡泡，无限畅玩。'
+  },
+  [GameType.TETRIS]: {
+    title: '俄罗斯方块玩法',
+    content: '通过左右滑动移动方块，向下加速下落，向上滑动旋转方块。填满一整行即可消除得分。方块堆到顶部则游戏结束。'
   }
 };
 
@@ -179,17 +183,13 @@ const useGameStats = (type: string) => {
   
   const recordPlay = (score?: number) => {
     incrementStat('totalGamesPlayed');
-    
-    // Update local detailed records
     try {
         const records = JSON.parse(localStorage.getItem('game_records') || '{}');
         const gameRec = records[type] || { played: 0, maxScore: 0 };
-        
         gameRec.played += 1;
         if (score !== undefined) {
             gameRec.maxScore = Math.max(gameRec.maxScore, score);
         }
-        
         records[type] = gameRec;
         localStorage.setItem('game_records', JSON.stringify(records));
     } catch(e) {
@@ -247,6 +247,212 @@ const useSwipe = (onSwipe: (dir: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT') => void) => {
   };
 
   return { onTouchStart, onTouchEnd };
+};
+
+// --- TETRIS ---
+const TETROMINOES = {
+  I: { shape: [[0, 0, 0, 0], [1, 1, 1, 1], [0, 0, 0, 0], [0, 0, 0, 0]], color: 'bg-cyan-400' },
+  J: { shape: [[1, 0, 0], [1, 1, 1], [0, 0, 0]], color: 'bg-blue-500' },
+  L: { shape: [[0, 0, 1], [1, 1, 1], [0, 0, 0]], color: 'bg-orange-500' },
+  O: { shape: [[1, 1], [1, 1]], color: 'bg-yellow-400' },
+  S: { shape: [[0, 1, 1], [1, 1, 0], [0, 0, 0]], color: 'bg-green-500' },
+  T: { shape: [[0, 1, 0], [1, 1, 1], [0, 0, 0]], color: 'bg-purple-500' },
+  Z: { shape: [[1, 1, 0], [0, 1, 1], [0, 0, 0]], color: 'bg-red-500' },
+};
+
+type TetrisState = {
+  board: (string | null)[];
+  activePiece: { pos: { x: number, y: number }, shape: number[][], color: string } | null;
+  score: number;
+  gameOver: boolean;
+  paused: boolean;
+};
+
+const TetrisGame = ({ onGameOver }: { onGameOver: (score: number) => void }) => {
+  const WIDTH = 10;
+  const HEIGHT = 20;
+  const { recordPlay } = useGameStats(GameType.TETRIS);
+  const [state, setState] = usePersistentState<TetrisState>('game_mem_tetris', {
+    board: Array(WIDTH * HEIGHT).fill(null),
+    activePiece: null,
+    score: 0,
+    gameOver: false,
+    paused: true
+  });
+
+  const spawnPiece = useCallback(() => {
+    const keys = Object.keys(TETROMINOES) as (keyof typeof TETROMINOES)[];
+    const key = keys[Math.floor(Math.random() * keys.length)];
+    const piece = TETROMINOES[key];
+    return {
+      pos: { x: Math.floor(WIDTH / 2) - Math.floor(piece.shape[0].length / 2), y: 0 },
+      shape: piece.shape,
+      color: piece.color
+    };
+  }, []);
+
+  const resetGame = () => {
+    setState({
+      board: Array(WIDTH * HEIGHT).fill(null),
+      activePiece: spawnPiece(),
+      score: 0,
+      gameOver: false,
+      paused: false
+    });
+    SoundSynthesizer.play('move');
+  };
+
+  const checkCollision = (pos: { x: number, y: number }, shape: number[][], board: (string | null)[]) => {
+    for (let y = 0; y < shape.length; y++) {
+      for (let x = 0; x < shape[y].length; x++) {
+        if (shape[y][x]) {
+          const boardX = pos.x + x;
+          const boardY = pos.y + y;
+          if (boardX < 0 || boardX >= WIDTH || boardY >= HEIGHT) return true;
+          if (boardY >= 0 && board[boardY * WIDTH + boardX]) return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  const rotate = (shape: number[][]) => {
+    const newShape = shape[0].map((_, i) => shape.map(row => row[i]).reverse());
+    return newShape;
+  };
+
+  const move = useCallback((dir: { x: number, y: number }) => {
+    if (state.gameOver || state.paused || !state.activePiece) return;
+    
+    const newPos = { x: state.activePiece.pos.x + dir.x, y: state.activePiece.pos.y + dir.y };
+    if (!checkCollision(newPos, state.activePiece.shape, state.board)) {
+      setState(prev => ({ ...prev, activePiece: prev.activePiece ? { ...prev.activePiece, pos: newPos } : null }));
+      if (dir.x !== 0 || dir.y !== 0) SoundSynthesizer.play('move');
+    } else if (dir.y > 0) {
+      // Land piece
+      const newBoard = [...state.board];
+      state.activePiece.shape.forEach((row, y) => {
+        row.forEach((val, x) => {
+          if (val) {
+            const boardIdx = (state.activePiece!.pos.y + y) * WIDTH + (state.activePiece!.pos.x + x);
+            if (boardIdx >= 0 && boardIdx < WIDTH * HEIGHT) newBoard[boardIdx] = state.activePiece!.color;
+          }
+        });
+      });
+
+      // Clear lines
+      let linesCleared = 0;
+      for (let y = HEIGHT - 1; y >= 0; y--) {
+        const row = newBoard.slice(y * WIDTH, (y + 1) * WIDTH);
+        if (row.every(cell => cell !== null)) {
+          newBoard.splice(y * WIDTH, WIDTH);
+          newBoard.unshift(...Array(WIDTH).fill(null));
+          linesCleared++;
+          y++;
+        }
+      }
+
+      const nextPiece = spawnPiece();
+      const isGameOver = checkCollision(nextPiece.pos, nextPiece.shape, newBoard);
+      const newScore = state.score + (linesCleared === 1 ? 100 : linesCleared === 2 ? 300 : linesCleared === 3 ? 500 : linesCleared === 4 ? 800 : 0);
+      
+      setState(prev => ({
+        ...prev,
+        board: newBoard,
+        activePiece: isGameOver ? null : nextPiece,
+        score: newScore,
+        gameOver: isGameOver
+      }));
+
+      if (linesCleared > 0) SoundSynthesizer.play('score');
+      if (isGameOver) {
+        SoundSynthesizer.play('lose');
+        onGameOver(newScore);
+        recordPlay(newScore);
+      }
+    }
+  }, [state, onGameOver, spawnPiece, setState]);
+
+  const rotatePiece = () => {
+    if (!state.activePiece || state.paused || state.gameOver) return;
+    const newShape = rotate(state.activePiece.shape);
+    if (!checkCollision(state.activePiece.pos, newShape, state.board)) {
+      setState(prev => ({ ...prev, activePiece: prev.activePiece ? { ...prev.activePiece, shape: newShape } : null }));
+      SoundSynthesizer.play('select');
+    }
+  };
+
+  useEffect(() => {
+    if (state.paused || state.gameOver) return;
+    const interval = setInterval(() => move({ x: 0, y: 1 }), 800);
+    return () => clearInterval(interval);
+  }, [state.paused, state.gameOver, move]);
+
+  useEffect(() => {
+    if (!state.activePiece && !state.gameOver) {
+      setState(prev => ({ ...prev, activePiece: spawnPiece() }));
+    }
+  }, []);
+
+  const { onTouchStart, onTouchEnd } = useSwipe((d) => {
+    if (d === 'LEFT') move({ x: -1, y: 0 });
+    if (d === 'RIGHT') move({ x: 1, y: 0 });
+    if (d === 'DOWN') move({ x: 0, y: 1 });
+    if (d === 'UP') rotatePiece();
+  });
+
+  return (
+    <div className="flex flex-col items-center w-full h-full justify-center select-none" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      <div className="w-full max-w-[300px] flex justify-between mb-4 items-center">
+        <div className="glass-panel px-4 py-1 rounded-xl">
+           <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">SCORE</span>
+           <p className="text-xl font-bold dark:text-white tabular-nums">{state.score}</p>
+        </div>
+        <button onClick={() => setState({ ...state, paused: !state.paused })} className="p-3 bg-white/50 dark:bg-gray-800/50 rounded-full shadow-lg text-primary">
+           {state.paused ? <Play size={20} fill="currentColor"/> : <Pause size={20} fill="currentColor"/>}
+        </button>
+      </div>
+
+      <div className="relative w-[280px] h-[560px] bg-slate-900/90 rounded-2xl border-4 border-slate-700 shadow-2xl overflow-hidden p-0.5 grid grid-cols-10 grid-rows-20 gap-[1px]">
+        {state.board.map((color, i) => (
+          <div key={i} className={`w-full h-full rounded-[2px] ${color || 'bg-white/5'}`} />
+        ))}
+        {state.activePiece && state.activePiece.shape.map((row, py) => row.map((val, px) => {
+          if (val) {
+            const bx = state.activePiece!.pos.x + px;
+            const by = state.activePiece!.pos.y + py;
+            if (bx >= 0 && bx < WIDTH && by >= 0 && by < HEIGHT) {
+               return (
+                 <div key={`${bx}-${by}`} 
+                   className={`absolute w-[10%] h-[5%] rounded-[2px] ${state.activePiece!.color} border border-white/10 shadow-sm`}
+                   style={{ left: `${bx * 10}%`, top: `${by * 5}%` }}
+                 />
+               );
+            }
+          }
+          return null;
+        }))}
+
+        {state.gameOver && (
+          <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center text-white z-20 backdrop-blur-md">
+             <Frown size={48} className="text-primary mb-4" />
+             <h2 className="text-3xl font-black mb-2">游戏结束</h2>
+             <p className="mb-8 font-bold text-gray-400">最终得分: {state.score}</p>
+             <button onClick={resetGame} className="bg-primary px-8 py-3 rounded-full font-bold shadow-lg shadow-primary/30 active:scale-95 transition-transform">重新开始</button>
+          </div>
+        )}
+        {state.paused && !state.gameOver && (
+          <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-white z-20 backdrop-blur-[2px]">
+             <div className="text-center">
+                <p className="text-2xl font-black mb-1">已暂停</p>
+                <p className="text-xs opacity-60">点击或滑动继续挑战</p>
+             </div>
+          </div>
+        )}
+      </div>
+      <p className="mt-6 text-gray-400 text-[10px] font-bold uppercase tracking-widest bg-gray-100 dark:bg-gray-800 px-4 py-1 rounded-full shadow-inner">滑动: 移动 | 上划: 旋转 | 下划: 软降</p>
+    </div>
+  );
 };
 
 // --- MINESWEEPER ---
@@ -322,62 +528,23 @@ const MinesweeperGame = () => {
   const toggleFlag = (r: number, c: number) => {
     const cell = state.grid[r][c];
     if (cell.isRevealed) return;
-
-    // Use immutable update pattern to correctly update state
-    const newGrid = state.grid.map((row, rowIndex) => 
-      rowIndex === r 
-        ? row.map((cell, colIndex) => colIndex === c ? { ...cell, isFlagged: !cell.isFlagged } : cell)
-        : row
-    );
-
+    const newGrid = state.grid.map((row, rowIndex) => rowIndex === r ? row.map((cell, colIndex) => colIndex === c ? { ...cell, isFlagged: !cell.isFlagged } : cell) : row);
     const wasFlagged = cell.isFlagged;
-    
-    setState(prev => ({ 
-      ...prev, 
-      grid: newGrid, 
-      // If it was flagged, we are unflagging (+1 mine left). If unflagged, we flag (-1 mine left).
-      minesLeft: wasFlagged ? prev.minesLeft + 1 : prev.minesLeft - 1 
-    }));
-    
+    setState(prev => ({ ...prev, grid: newGrid, minesLeft: wasFlagged ? prev.minesLeft + 1 : prev.minesLeft - 1 }));
     SoundSynthesizer.play('select');
-    if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(50);
-  };
-
-  const handleInteractionStart = (r: number, c: number) => {
-    if (state.gameState !== 'playing') return;
-    longPressTimer.current = setTimeout(() => {
-        toggleFlag(r, c);
-        longPressTimer.current = null; // Mark as handled
-    }, 400); // 400ms long press
-  };
-
-  const handleInteractionEnd = (r: number, c: number, isTouch: boolean) => {
-    if (longPressTimer.current) {
-        clearTimeout(longPressTimer.current);
-        longPressTimer.current = null;
-        // If timer was still running, it means it's a short tap -> Reveal
-        handleCellClick(r, c);
-    }
   };
 
   const handleCellClick = (r: number, c: number) => {
     if (state.gameState !== 'playing') return;
     const cell = state.grid[r][c];
-
-    if (mode === 'flag') {
-      toggleFlag(r, c);
-      return;
-    }
+    if (mode === 'flag') { toggleFlag(r, c); return; }
     if (cell.isFlagged || cell.isRevealed) return;
-
     if (cell.isMine) {
-      // Reveal mines visually
       const newGrid = state.grid.map(row => row.map(cell => ({ ...cell, isRevealed: cell.isMine ? true : cell.isRevealed })));
       setState({ ...state, grid: newGrid, gameState: 'lost' });
       SoundSynthesizer.play('bomb');
       SoundSynthesizer.play('lose');
-      recordPlay(0); // Record game play on loss
-      if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(200);
+      recordPlay(0);
     } else {
       revealCells(r, c);
       SoundSynthesizer.play('move');
@@ -385,15 +552,13 @@ const MinesweeperGame = () => {
   };
 
   const revealCells = (startR: number, startC: number) => {
-    const newGrid = JSON.parse(JSON.stringify(state.grid)); // Deep copy
+    const newGrid = JSON.parse(JSON.stringify(state.grid));
     const config = DIFFICULTY_MINES[state.difficulty];
     const stack = [[startR, startC]];
-
     while (stack.length > 0) {
       const [r, c] = stack.pop()!;
       if (newGrid[r][c].isRevealed) continue;
       newGrid[r][c].isRevealed = true;
-      newGrid[r][c].isFlagged = false;
       if (newGrid[r][c].neighborCount === 0) {
         const directions = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
         directions.forEach(([dr, dc]) => {
@@ -402,19 +567,14 @@ const MinesweeperGame = () => {
         });
       }
     }
-    
     let revealedCount = 0;
     newGrid.forEach((row: Cell[]) => row.forEach((cell: Cell) => { if (cell.isRevealed) revealedCount++; }));
     const hasWon = revealedCount === (config.rows * config.cols - config.mines);
-    
-    if (hasWon) {
-      recordPlay(config.rows * config.cols); // Use total cells as score for win
-      SoundSynthesizer.play('win');
-    }
+    if (hasWon) { recordPlay(100); SoundSynthesizer.play('win'); }
     setState({ ...state, grid: newGrid, gameState: hasWon ? 'won' : 'playing' });
   };
 
-  if (!state.grid || state.grid.length === 0) return <div>Loading...</div>;
+  if (!state.grid || state.grid.length === 0) return null;
   const currentConfig = DIFFICULTY_MINES[state.difficulty];
 
   return (
@@ -423,82 +583,46 @@ const MinesweeperGame = () => {
         <div className="flex justify-between mb-4">
           <div className="flex gap-2">
             {(['easy', 'medium', 'hard'] as const).map(d => (
-              <button key={d} onClick={() => initGame(d)} className={`px-3 py-1 rounded-lg text-xs font-bold capitalize transition-all active:scale-95 ${state.difficulty === d ? 'bg-primary text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-700 text-gray-500'}`}>{d}</button>
+              <button key={d} onClick={() => initGame(d)} className={`px-3 py-1 rounded-lg text-xs font-bold capitalize transition-all ${state.difficulty === d ? 'bg-primary text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-700 text-gray-500'}`}>{d}</button>
             ))}
           </div>
-          <button onClick={() => initGame(state.difficulty)} className="active:rotate-180 transition-transform duration-300"><RefreshCw size={18} className="text-gray-500 hover:text-primary" /></button>
+          <button onClick={() => initGame(state.difficulty)} className="active:rotate-180 transition-transform"><RefreshCw size={18} className="text-gray-500" /></button>
         </div>
         <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 font-mono text-xl font-bold text-red-500 bg-red-50 dark:bg-red-900/20 px-3 py-1 rounded-lg"><AlertTriangle size={18} /> {state.minesLeft}</div>
             <div className="flex bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
-               <button onClick={() => setMode('dig')} className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all ${mode === 'dig' ? 'bg-white dark:bg-gray-600 shadow-sm text-primary' : 'text-gray-400'}`}>挖开</button>
-               <button onClick={() => setMode('flag')} className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all ${mode === 'flag' ? 'bg-white dark:bg-gray-600 shadow-sm text-red-500' : 'text-gray-400'}`}>插旗</button>
+               <button onClick={() => setMode('dig')} className={`px-4 py-1.5 rounded-md text-sm font-bold ${mode === 'dig' ? 'bg-white dark:bg-gray-600 shadow text-primary' : 'text-gray-400'}`}>挖开</button>
+               <button onClick={() => setMode('flag')} className={`px-4 py-1.5 rounded-md text-sm font-bold ${mode === 'flag' ? 'bg-white dark:bg-gray-600 shadow text-red-500' : 'text-gray-400'}`}>插旗</button>
             </div>
         </div>
       </div>
-      
-      <div className="relative p-2 glass-panel rounded-2xl shadow-2xl w-full max-w-[360px]">
-        {/* Force Aspect Ratio Square */}
-        <div className="grid gap-[2px] select-none touch-none mx-auto w-full aspect-square" 
-           style={{ 
-             gridTemplateColumns: `repeat(${currentConfig.cols}, 1fr)`, 
-             gridTemplateRows: `repeat(${currentConfig.rows}, 1fr)` 
-           }}>
+      <div className="relative p-2 glass-panel rounded-2xl shadow-2xl w-full max-w-[360px] aspect-square">
+        <div className="grid gap-[2px] w-full h-full" style={{ gridTemplateColumns: `repeat(${currentConfig.cols}, 1fr)` }}>
           {state.grid.map((row, r) => row.map((cell, c) => (
-            <div key={`${r}-${c}`} 
-              onMouseDown={() => handleInteractionStart(r, c)}
-              onMouseUp={() => handleInteractionEnd(r, c, false)}
-              onMouseLeave={() => { if(longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; } }}
-              onTouchStart={() => handleInteractionStart(r, c)}
-              onTouchEnd={(e) => { e.preventDefault(); handleInteractionEnd(r, c, true); }}
-              className={`w-full h-full flex items-center justify-center font-bold text-sm cursor-pointer rounded-[2px] transition-all duration-100
-                ${cell.isRevealed 
-                   ? (cell.isMine 
-                        ? 'bg-red-500 shadow-none' 
-                        : 'bg-gray-100 dark:bg-white/5 shadow-inner border border-black/5 dark:border-white/5') 
-                   : 'bg-blue-400 dark:bg-slate-600 shadow-[inset_-2px_-2px_0_rgba(0,0,0,0.2),inset_2px_2px_0_rgba(255,255,255,0.3)] active:bg-blue-500 active:shadow-none'}
-              `}
-            >
-              {cell.isRevealed 
-                ? (cell.isMine 
-                    ? <Skull size="60%" className="text-white animate-pulse"/> 
-                    : (cell.neighborCount > 0 
-                        ? <span style={{fontSize: '90%'}} className={['text-gray-500', 'text-blue-600', 'text-green-600', 'text-red-600', 'text-purple-700', 'text-orange-700'][cell.neighborCount]}>{cell.neighborCount}</span> 
-                        : '')) 
-                : (cell.isFlagged 
-                    ? <Flag size="50%" className="text-red-600 fill-red-600 drop-shadow-sm animate-bounce-in" /> 
-                    : '')}
+            <div key={`${r}-${c}`} onClick={() => handleCellClick(r, c)} className={`w-full h-full flex items-center justify-center font-bold text-sm cursor-pointer rounded-[2px] ${cell.isRevealed ? (cell.isMine ? 'bg-red-500' : 'bg-gray-100 dark:bg-white/5') : 'bg-blue-400 dark:bg-slate-600 shadow-inner'}`}>
+              {cell.isRevealed ? (cell.isMine ? <Skull size="60%" className="text-white"/> : (cell.neighborCount > 0 ? <span className={['text-blue-500', 'text-green-500', 'text-red-500', 'text-purple-700', 'text-orange-700'][cell.neighborCount-1]}>{cell.neighborCount}</span> : '')) : (cell.isFlagged ? <Flag size="50%" className="text-red-600 fill-red-600" /> : '')}
             </div>
           )))}
         </div>
-        
         {state.gameState !== 'playing' && (
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/10 backdrop-blur-[3px] rounded-2xl">
-             <div className="bg-white/90 dark:bg-gray-800/90 p-8 rounded-3xl shadow-2xl flex flex-col items-center animate-fade-in border border-white/20">
-                <div className={`text-5xl mb-4 ${state.gameState === 'won' ? 'animate-bounce' : 'animate-pulse'}`}>
-                    {state.gameState === 'won' ? '🏆' : '💥'}
-                </div>
-                <h3 className={`text-2xl font-bold mb-6 ${state.gameState === 'won' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                    {state.gameState === 'won' ? '恭喜获胜！' : '游戏结束'}
-                </h3>
-                <button onClick={() => initGame(state.difficulty)} className="px-8 py-3 bg-primary text-white rounded-full font-bold shadow-lg shadow-primary/30 hover:scale-105 transition-transform active:scale-95">再来一局</button>
+             <div className="bg-white/90 dark:bg-gray-800/90 p-8 rounded-3xl shadow-2xl flex flex-col items-center">
+                <h3 className={`text-2xl font-bold mb-6 ${state.gameState === 'won' ? 'text-green-600' : 'text-red-600'}`}>{state.gameState === 'won' ? '恭喜获胜！' : '触发了地雷'}</h3>
+                <button onClick={() => initGame(state.difficulty)} className="px-8 py-3 bg-primary text-white rounded-full font-bold shadow-lg">再来一局</button>
              </div>
           </div>
         )}
       </div>
-      <p className="mt-4 text-xs text-gray-400 font-medium">长按方块可快速插旗</p>
     </div>
   );
 };
 
 // --- GOMOKU ---
-type GomokuState = { board: number[]; player: number; winner: number; difficulty: 'easy' | 'normal' | 'hard'; };
 const GomokuGame = () => {
+  const SIZE = 13;
   const { recordPlay } = useGameStats(GameType.GOMOKU);
-  const SIZE = 13; 
-  const [state, setState] = usePersistentState<GomokuState>('game_mem_gomoku', { board: Array(SIZE * SIZE).fill(0), player: 1, winner: 0, difficulty: 'normal' });
+  const [state, setState] = usePersistentState('game_mem_gomoku', { board: Array(SIZE * SIZE).fill(0), player: 1, winner: 0 });
 
-  // Improved Win Check
   const checkWin = (b: number[], p: number) => {
     const dirs = [[1, 0], [0, 1], [1, 1], [1, -1]];
     for (let r = 0; r < SIZE; r++) {
@@ -517,147 +641,53 @@ const GomokuGame = () => {
     return false;
   };
 
+  const makeAiMove = useCallback(() => {
+    const available = state.board.map((v, i) => v === 0 ? i : -1).filter(i => i !== -1);
+    if (available.length === 0) return;
+    const move = available[Math.floor(Math.random() * available.length)];
+    const newBoard = [...state.board];
+    newBoard[move] = 2;
+    const hasWon = checkWin(newBoard, 2);
+    setState({ board: newBoard, player: 1, winner: hasWon ? 2 : 0 });
+    SoundSynthesizer.play(hasWon ? 'lose' : 'move');
+    if (hasWon) recordPlay(0);
+  }, [state.board, recordPlay]);
+
   useEffect(() => {
     if (state.player === 2 && state.winner === 0) {
       const timer = setTimeout(makeAiMove, 600);
       return () => clearTimeout(timer);
     }
-  }, [state.player, state.winner]);
-
-  // --- HEURISTIC AI ---
-  const evaluateMove = (board: number[], move: number, player: number) => {
-    let score = 0;
-    const r = Math.floor(move / SIZE);
-    const c = move % SIZE;
-    const dirs = [[1, 0], [0, 1], [1, 1], [1, -1]];
-
-    const centerDist = Math.abs(r - 6) + Math.abs(c - 6);
-    score += (12 - centerDist);
-
-    for (const [dr, dc] of dirs) {
-      let count = 1;
-      let blocked = 0;
-      
-      for (let k = 1; k < 5; k++) {
-        const nr = r + dr * k, nc = c + dc * k;
-        if (nr < 0 || nr >= SIZE || nc < 0 || nc >= SIZE) { blocked++; break; }
-        const val = board[nr * SIZE + nc];
-        if (val === player) count++;
-        else if (val !== 0) { blocked++; break; }
-        else break; 
-      }
-      
-      for (let k = 1; k < 5; k++) {
-        const nr = r - dr * k, nc = c - dc * k;
-        if (nr < 0 || nr >= SIZE || nc < 0 || nc >= SIZE) { blocked++; break; }
-        const val = board[nr * SIZE + nc];
-        if (val === player) count++;
-        else if (val !== 0) { blocked++; break; }
-        else break; 
-      }
-
-      if (count >= 5) score += 100000;
-      else if (count === 4 && blocked === 0) score += 10000; // Open 4
-      else if (count === 4 && blocked === 1) score += 1000;  // Closed 4
-      else if (count === 3 && blocked === 0) score += 1000;  // Open 3
-      else if (count === 3 && blocked === 1) score += 100;
-      else if (count === 2 && blocked === 0) score += 50;
-    }
-    return score;
-  };
-
-  const makeAiMove = () => {
-    const available = state.board.map((v, i) => v === 0 ? i : -1).filter(i => i !== -1);
-    if (available.length === 0) return;
-
-    let bestMove = available[0];
-    let maxScore = -1;
-
-    if (state.difficulty === 'easy') {
-       if (Math.random() > 0.5) {
-         bestMove = available[Math.floor(Math.random() * available.length)];
-       } else {
-         for (const move of available) {
-             const temp = [...state.board];
-             temp[move] = 1; 
-             if (checkWin(temp, 1)) { bestMove = move; break; }
-         }
-       }
-    } else {
-       for (const move of available) {
-           const attackScore = evaluateMove(state.board, move, 2);
-           const defenseScore = evaluateMove(state.board, move, 1);
-           
-           let totalScore = attackScore + defenseScore;
-           
-           if (state.difficulty === 'hard') {
-               if (attackScore < 90000 && defenseScore > 500) {
-                   totalScore = attackScore + (defenseScore * 1.1);
-               }
-           }
-           if (state.difficulty === 'normal') totalScore += Math.random() * 10;
-           
-           if (totalScore > maxScore) {
-               maxScore = totalScore;
-               bestMove = move;
-           }
-       }
-    }
-
-    const newBoard = [...state.board];
-    newBoard[bestMove] = 2;
-    const hasWon = checkWin(newBoard, 2);
-    
-    setState({ ...state, board: newBoard, player: 1, winner: hasWon ? 2 : 0 });
-    SoundSynthesizer.play(hasWon ? 'lose' : 'move');
-    if (hasWon) {
-        // AI wins
-        recordPlay(0); // Record game played (score 0 for loss)
-    }
-  };
+  }, [state.player, state.winner, makeAiMove]);
 
   const handleUserClick = (i: number) => {
-    SoundSynthesizer.init();
     if (state.board[i] !== 0 || state.winner !== 0 || state.player !== 1) return;
     const newBoard = [...state.board];
     newBoard[i] = 1;
     SoundSynthesizer.play('select');
-    
     const hasWon = checkWin(newBoard, 1);
-    if (hasWon) { recordPlay(1); SoundSynthesizer.play('win'); } // Win, score 1
-    
-    setState({ ...state, board: newBoard, player: hasWon ? 1 : 2, winner: hasWon ? 1 : 0 });
+    if (hasWon) { recordPlay(100); SoundSynthesizer.play('win'); }
+    setState({ board: newBoard, player: hasWon ? 1 : 2, winner: hasWon ? 1 : 0 });
   };
 
-  const reset = (diff?: 'easy' | 'normal' | 'hard') => { 
-    setState({ board: Array(SIZE * SIZE).fill(0), winner: 0, player: 1, difficulty: diff || state.difficulty });
-    SoundSynthesizer.play('move');
-  };
+  const reset = () => { setState({ board: Array(SIZE * SIZE).fill(0), winner: 0, player: 1 }); SoundSynthesizer.play('move'); };
 
   return (
     <div className="flex flex-col items-center justify-center h-full w-full">
-      <div className="w-full max-w-sm glass-panel p-4 rounded-xl shadow-lg mb-6 flex justify-between items-center">
-         <div className="flex gap-1">
-            {(['easy', 'normal', 'hard'] as const).map(d => (
-              <button key={d} onClick={() => reset(d)} className={`px-3 py-1 text-xs rounded-full capitalize transition-all ${state.difficulty === d ? 'bg-blue-500 text-white shadow-md' : 'bg-gray-100 text-gray-500'}`}>{d}</button>
-            ))}
-         </div>
-         <span className="text-sm font-bold text-gray-500">{state.winner ? (state.winner === 1 ? "你赢了!" : "电脑获胜") : (state.player === 1 ? "你的回合" : "电脑思考中...")}</span>
+      <div className="w-full max-w-sm glass-panel p-4 rounded-xl shadow-lg mb-6 flex justify-between items-center font-bold">
+         <span className="text-sm text-gray-500">{state.winner ? (state.winner === 1 ? "你赢了!" : "电脑获胜") : (state.player === 1 ? "你的回合" : "电脑思考中...")}</span>
+         <button onClick={reset}><RotateCcw size={18}/></button>
       </div>
-      <div className="relative w-full max-w-[360px] aspect-square bg-[#e6cba5] rounded-lg shadow-2xl p-4 border-[6px] border-[#d5b081] shadow-black/20 overflow-hidden">
-         <div className="w-full h-full grid" style={{ gridTemplateColumns: `repeat(${SIZE}, 1fr)`, gridTemplateRows: `repeat(${SIZE}, 1fr)` }}>
+      <div className="relative w-full max-w-[360px] aspect-square bg-[#e6cba5] rounded-lg shadow-2xl p-4 border-[6px] border-[#d5b081]">
+         <div className="w-full h-full grid" style={{ gridTemplateColumns: `repeat(${SIZE}, 1fr)` }}>
             {state.board.map((cell, i) => (
-              <div key={i} onClick={() => handleUserClick(i)} className="relative flex items-center justify-center cursor-pointer">
-                <div className="absolute w-full h-[1px] bg-gray-700/30 z-0"></div>
-                <div className="absolute h-full w-[1px] bg-gray-700/30 z-0"></div>
-                {((i % SIZE === 3 || i % SIZE === 9 || i % SIZE === 6) && (Math.floor(i/SIZE) === 3 || Math.floor(i/SIZE) === 9 || Math.floor(i/SIZE) === 6)) && (<div className="absolute w-1.5 h-1.5 rounded-full bg-gray-700/50 z-0" />)}
-                {cell !== 0 && (<div className={`w-[85%] h-[85%] rounded-full z-10 shadow-[3px_3px_5px_rgba(0,0,0,0.4),inset_-2px_-2px_6px_rgba(0,0,0,0.2),inset_2px_2px_6px_rgba(255,255,255,0.3)] transition-all duration-300 animate-[drop_0.3s_cubic-bezier(0.175,0.885,0.32,1.275)] ${cell === 1 ? 'bg-gradient-to-br from-gray-800 to-black' : 'bg-gradient-to-br from-white to-gray-200'}`} />)}
+              <div key={i} onClick={() => handleUserClick(i)} className="relative flex items-center justify-center cursor-pointer border-[0.5px] border-black/10">
+                {cell !== 0 && (<div className={`w-[85%] h-[85%] rounded-full shadow-md ${cell === 1 ? 'bg-black' : 'bg-white'}`} />)}
               </div>
             ))}
          </div>
-         {state.winner !== 0 && (<div className="absolute inset-0 z-20 flex items-center justify-center bg-black/20 backdrop-blur-[2px] rounded-lg"><button onClick={() => reset()} className="bg-primary text-white px-8 py-3 rounded-full font-bold shadow-2xl animate-bounce">再来一局</button></div>)}
+         {state.winner !== 0 && (<div className="absolute inset-0 flex items-center justify-center bg-black/10 backdrop-blur-sm rounded-lg"><button onClick={reset} className="bg-primary text-white px-8 py-3 rounded-full font-bold shadow-2xl">再来一局</button></div>)}
       </div>
-      <style>{`@keyframes drop { 0% { transform: scale(1.5); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }`}</style>
     </div>
   );
 };
@@ -666,6 +696,7 @@ const GomokuGame = () => {
 type SnakeState = { snake: {x:number, y:number}[]; food: {x:number, y:number}; score: number; highScore: number; gameOver: boolean; paused: boolean; };
 const SnakeGame = ({ onGameOver }: { onGameOver: (score: number) => void }) => {
   const GRID = 20;
+  const { recordPlay } = useGameStats(GameType.SNAKE);
   const [state, setState] = usePersistentState<SnakeState>('game_mem_snake', { snake: [{ x: 10, y: 10 }], food: { x: 15, y: 15 }, score: 0, highScore: 0, gameOver: false, paused: true });
   const [dir, setDir] = useState({ x: 0, y: 0 });
 
@@ -679,922 +710,374 @@ const SnakeGame = ({ onGameOver }: { onGameOver: (score: number) => void }) => {
 
   const moveSnake = useCallback(() => {
     if (state.gameOver || state.paused || (dir.x === 0 && dir.y === 0)) return;
-    
     setState(prev => {
       const head = { x: prev.snake[0].x + dir.x, y: prev.snake[0].y + dir.y };
       if (head.x < 0 || head.x >= GRID || head.y < 0 || head.y >= GRID || prev.snake.some(s => s.x === head.x && s.y === head.y)) {
-        onGameOver(prev.score); 
         SoundSynthesizer.play('lose');
+        onGameOver(prev.score);
+        recordPlay(prev.score);
         return { ...prev, gameOver: true };
       }
-      
       const newSnake = [head, ...prev.snake];
-      let newFood = prev.food;
-      let newScore = prev.score;
-      let newHighScore = prev.highScore;
-
       if (head.x === prev.food.x && head.y === prev.food.y) {
-        newScore += 1;
-        newHighScore = Math.max(newScore, newHighScore);
-        newFood = { x: Math.floor(Math.random() * GRID), y: Math.floor(Math.random() * GRID) };
         SoundSynthesizer.play('score');
-      } else { 
-        newSnake.pop(); 
+        return { ...prev, snake: newSnake, food: { x: Math.floor(Math.random() * GRID), y: Math.floor(Math.random() * GRID) }, score: prev.score + 10 };
       }
-      return { ...prev, snake: newSnake, food: newFood, score: newScore, highScore: newHighScore };
+      newSnake.pop();
+      return { ...prev, snake: newSnake };
     });
-  }, [dir, onGameOver, state.gameOver, state.paused]);
+  }, [dir, state.gameOver, state.paused, onGameOver, recordPlay]);
 
-  useEffect(() => { const i = setInterval(moveSnake, 130); return () => clearInterval(i); }, [moveSnake]);
-
-  const resetGame = () => {
-    setState({ snake: [{x:10,y:10}], food: { x: Math.floor(Math.random() * GRID), y: Math.floor(Math.random() * GRID) }, score: 0, highScore: state.highScore, gameOver: false, paused: false });
-    setDir({x:0, y:0});
-    SoundSynthesizer.play('move');
-  };
+  useEffect(() => { const interval = setInterval(moveSnake, 150); return () => clearInterval(interval); }, [moveSnake]);
 
   return (
-    <div className="flex flex-col items-center w-full select-none h-full justify-center" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      <div className="mb-4 text-xl font-bold dark:text-white flex justify-between w-full max-w-[350px]">
-         <div className="flex gap-4">
-            <span className="bg-white/50 px-3 py-1 rounded-full text-sm">分数: {state.score}</span>
-            <span className="bg-yellow-100/50 px-3 py-1 rounded-full text-sm text-yellow-700">最高: {state.highScore}</span>
-         </div>
-         <button onClick={() => setState({...state, paused: !state.paused})} className="p-1 rounded-full bg-white/50">{state.paused ? <Play size={20}/> : <Pause size={20}/>}</button>
+    <div className="flex flex-col items-center h-full w-full justify-center" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      <div className="w-full max-w-[320px] flex justify-between mb-4 px-2">
+         <div className="glass-panel px-4 py-2 rounded-xl"><span className="text-[10px] text-gray-400 font-bold">SCORE</span><p className="text-xl font-bold dark:text-white">{state.score}</p></div>
+         <button onClick={() => setState({ ...state, paused: !state.paused })} className="p-3 bg-white/50 dark:bg-gray-800/50 rounded-full">{state.paused ? <Play/> : <Pause/>}</button>
       </div>
-      <div className="relative w-full max-w-[350px] aspect-square bg-gray-800/80 backdrop-blur-md rounded-xl p-1 border-4 border-gray-600 shadow-2xl overflow-hidden">
-        {state.gameOver && <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center text-white font-bold z-10 backdrop-blur-sm"><h2 className="text-3xl mb-4">游戏结束</h2><button onClick={resetGame} className="bg-primary px-6 py-2 rounded-full shadow-lg">重试</button></div>}
-        {state.paused && !state.gameOver && (<div className="absolute inset-0 bg-black/40 flex items-center justify-center text-white z-10"><div className="text-center animate-pulse"><p className="text-2xl font-bold mb-2">已暂停</p><p className="text-sm opacity-80">点击或滑动继续</p></div></div>)}
-        {state.snake.map((s, i) => (<div key={i} className="absolute rounded-sm shadow-sm border border-green-400" style={{ backgroundColor: i === 0 ? '#4ade80' : '#22c55e', zIndex: i === 0 ? 5 : 2, left: `${(s.x/GRID)*100}%`, top: `${(s.y/GRID)*100}%`, width: `${100/GRID}%`, height: `${100/GRID}%` }} />))}
-        <div className="absolute bg-red-500 rounded-full animate-pulse shadow-md shadow-red-500/50" style={{ left: `${(state.food.x/GRID)*100}%`, top: `${(state.food.y/GRID)*100}%`, width: `${100/GRID}%`, height: `${100/GRID}%` }} />
+      <div className="relative w-[320px] h-[320px] bg-slate-100 dark:bg-slate-900 rounded-2xl border-4 border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden grid" style={{ gridTemplateColumns: `repeat(${GRID}, 1fr)` }}>
+         {Array.from({ length: GRID * GRID }).map((_, i) => {
+            const x = i % GRID, y = Math.floor(i / GRID);
+            const isSnake = state.snake.some(s => s.x === x && s.y === y);
+            const isHead = state.snake[0].x === x && state.snake[0].y === y;
+            const isFood = state.food.x === x && state.food.y === y;
+            return <div key={i} className={`w-full h-full ${isHead ? 'bg-primary rounded-sm scale-110 z-10' : isSnake ? 'bg-primary/40 rounded-[2px]' : isFood ? 'flex items-center justify-center' : ''}`}>{isFood && <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-md"/>}</div>;
+         })}
+         {state.gameOver && (<div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center text-white z-20 backdrop-blur-sm"><h2 className="text-3xl font-bold mb-6">游戏结束</h2><button onClick={() => { setDir({x:0,y:0}); setState({ snake: [{ x: 10, y: 10 }], food: { x: 15, y: 15 }, score: 0, highScore: 0, gameOver: false, paused: false }); }} className="bg-primary px-8 py-3 rounded-full font-bold shadow-lg">重新开始</button></div>)}
       </div>
-      <p className="mt-4 text-gray-400 text-xs">滑动屏幕控制方向</p>
     </div>
   );
 };
 
-// --- 2048 ---
-type State2048 = { board: number[]; score: number; bestScore: number; gameOver: boolean; hasWon: boolean; };
-const Game2048 = ({ onMove }: { onMove: (score: number) => void }) => {
-  const [state, setState] = usePersistentState<State2048>('game_mem_2048', { board: Array(16).fill(0), score: 0, bestScore: 0, gameOver: false, hasWon: false });
+// --- G2048 ---
+const G2048Game = ({ onGameOver }: { onGameOver: (score: number) => void }) => {
+  const { recordPlay } = useGameStats(GameType.G2048);
+  const [board, setBoard] = usePersistentState<number[]>('game_mem_2048', Array(16).fill(0));
+  const [score, setScore] = usePersistentState('game_mem_2048_score', 0);
+  const [gameOver, setGameOver] = useState(false);
 
-  useEffect(() => { if (state.board.every(n => n === 0)) init(); }, []);
-
-  const init = () => {
-     const b = Array(16).fill(0);
-     addNum(b); addNum(b);
-     setState({ board: b, score: 0, bestScore: state.bestScore, gameOver: false, hasWon: false });
-     SoundSynthesizer.play('move');
-  };
-
-  const addNum = (b: number[]) => {
-    const empty = b.map((v,i)=>v===0?i:-1).filter(i=>i!==-1);
-    if(empty.length) b[empty[Math.floor(Math.random()*empty.length)]] = Math.random()>.9 ? 4 : 2;
-  };
-
-  const checkGameOver = (b: number[]) => {
-    // 1. If any cell is 0, game is not over
-    if (b.includes(0)) return false;
-    
-    // 2. Check adjacent cells for merges
-    for (let i = 0; i < 16; i++) {
-        const val = b[i];
-        const r = Math.floor(i / 4);
-        const c = i % 4;
-
-        // Check Right
-        if (c < 3 && val === b[i + 1]) return false;
-        // Check Down
-        if (r < 3 && val === b[i + 4]) return false;
-    }
-    return true;
-  };
-
-  const slideRow = (row: number[], updateScore: (n: number) => void) => {
-    let arr = row.filter(val => val !== 0);
-    for (let i = 0; i < arr.length - 1; i++) {
-      if (arr[i] === arr[i + 1]) {
-        arr[i] *= 2;
-        updateScore(arr[i]);
-        arr[i + 1] = 0; 
-      }
-    }
-    arr = arr.filter(val => val !== 0);
-    while (arr.length < 4) arr.push(0);
-    return arr;
-  };
-
-  const move = (dir: number) => { 
-    if(state.gameOver) return;
-    let newBoard = [...state.board];
-    let changed = false;
-    let gainedScore = 0;
-    const rotateRight = (b: number[]) => {
-        const res = Array(16).fill(0);
-        for(let r=0; r<4; r++) for(let c=0; c<4; c++) res[c*4+(3-r)] = b[r*4+c];
-        return res;
-    };
-    let rotations = 0;
-    if (dir === 1) rotations = 3; if (dir === 2) rotations = 2; if (dir === 3) rotations = 1; 
-    for(let i=0; i<rotations; i++) newBoard = rotateRight(newBoard);
-    for(let r=0; r<4; r++) {
-       const rowStart = r * 4;
-       const row = newBoard.slice(rowStart, rowStart + 4);
-       const newRow = slideRow(row, (s) => gainedScore += s);
-       for(let c=0; c<4; c++) {
-         if (newBoard[rowStart + c] !== newRow[c]) changed = true;
-         newBoard[rowStart + c] = newRow[c];
-       }
-    }
-    const rotationsBack = (4 - rotations) % 4;
-    for(let i=0; i<rotationsBack; i++) newBoard = rotateRight(newBoard);
-
-    if (changed) {
-       addNum(newBoard);
-       const newScore = state.score + gainedScore;
-       const newBest = Math.max(newScore, state.bestScore);
-       let hasWon = state.hasWon;
-       let isGameOver = false;
-
-       if (newBoard.includes(2048) && !hasWon) { hasWon = true; SoundSynthesizer.play('win'); }
-       
-       if (checkGameOver(newBoard)) {
-           isGameOver = true;
-           SoundSynthesizer.play('lose');
-           onMove(newScore); // Save score
-       }
-
-       setState({ ...state, board: newBoard, score: newScore, bestScore: newBest, hasWon, gameOver: isGameOver });
-       SoundSynthesizer.play(gainedScore > 0 ? 'merge' : 'move');
-       if (!isGameOver) onMove(newScore);
-    }
-  };
-
-  const { onTouchStart, onTouchEnd } = useSwipe((d) => {
-    if(d==='LEFT') move(0); if(d==='UP') move(1); if(d==='RIGHT') move(2); if(d==='DOWN') move(3);
-  });
-
-  const getColor = (v: number) => {
-    const colors: Record<number, string> = {
-      2: 'bg-white text-gray-800 border-gray-200', 4: 'bg-orange-100 text-gray-800 border-orange-200', 8: 'bg-orange-300 text-white border-orange-400', 16: 'bg-orange-500 text-white border-orange-600', 32: 'bg-red-400 text-white border-red-500', 64: 'bg-red-600 text-white border-red-700', 128: 'bg-yellow-300 text-white shadow-lg shadow-yellow-500/50', 256: 'bg-yellow-400 text-white shadow-lg shadow-yellow-500/50', 512: 'bg-yellow-500 text-white shadow-lg shadow-yellow-500/50', 1024: 'bg-yellow-600 text-white shadow-xl', 2048: 'bg-yellow-700 text-white shadow-2xl'
-    };
-    return colors[v] || 'bg-black text-white';
-  };
-  const getTextSize = (v: number) => { if (v > 1000) return 'text-xl'; if (v > 100) return 'text-2xl'; return 'text-3xl'; };
-
-  return (
-    <div className="flex flex-col items-center select-none h-full justify-center w-full relative" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-       <div className="flex justify-between w-full max-w-[350px] mb-6 items-center">
-          <div className="text-3xl font-bold bg-yellow-500 text-white px-4 py-2 rounded-xl shadow-lg">2048</div>
-          <div className="flex gap-2">
-            <div className="flex flex-col items-center glass-panel px-3 py-1 rounded-xl min-w-[70px]"><span className="text-[10px] text-gray-400 font-bold tracking-widest">SCORE</span><span className="text-xl font-bold dark:text-white">{state.score}</span></div>
-             <div className="flex flex-col items-center glass-panel px-3 py-1 rounded-xl min-w-[70px]"><span className="text-[10px] text-gray-400 font-bold tracking-widest">BEST</span><span className="text-xl font-bold dark:text-white">{state.bestScore}</span></div>
-          </div>
-          <button onClick={init} className="bg-white p-3 rounded-full shadow hover:bg-gray-100 transition-colors"><RefreshCw size={20} className="text-primary"/></button>
-       </div>
-       <div className="w-full max-w-[350px] aspect-square bg-gray-300/50 backdrop-blur-md p-3 rounded-2xl shadow-inner border border-white/20 grid grid-cols-4 grid-rows-4 gap-3 relative">
-          {state.board.map((v, i) => (<div key={i} className={`w-full h-full flex items-center justify-center font-bold rounded-xl shadow-sm transition-all duration-200 border overflow-hidden ${v === 0 ? 'bg-gray-200/50 border-transparent' : getColor(v)} ${v > 0 ? 'scale-100 opacity-100' : 'scale-100 opacity-100'} ${getTextSize(v)}`}>{v > 0 && v}</div>))}
-          
-          {state.gameOver && (
-            <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/40 backdrop-blur-sm rounded-2xl">
-                <div className="bg-white/90 dark:bg-gray-800/90 p-6 rounded-3xl shadow-2xl flex flex-col items-center animate-fade-in border border-white/20">
-                    <h3 className="text-3xl font-bold mb-4 text-red-500">游戏结束</h3>
-                    <p className="text-gray-500 mb-6 font-bold">最终得分: {state.score}</p>
-                    <button onClick={init} className="px-8 py-3 bg-primary text-white rounded-full font-bold shadow-lg shadow-primary/30 hover:scale-105 transition-transform active:scale-95">再来一局</button>
-                </div>
-            </div>
-          )}
-       </div>
-       <p className="mt-6 text-gray-400 text-sm font-medium">滑动屏幕移动合并方块</p>
-    </div>
-  );
-};
-
-// --- MATCH 3 (Fruit Edition) ---
-type SpecialType = 'NONE' | 'ROW' | 'COL' | 'BOMB' | 'RAINBOW';
-type Match3Cell = {
-  type: string;
-  special: SpecialType;
-  id: number; 
-};
-type Match3State = { board: Match3Cell[]; score: number; gameOver: boolean; };
-
-const Match3Game = () => {
-  const { recordPlay } = useGameStats(GameType.MATCH3);
-  const WIDTH = 8;
-  const FRUITS = ['🍎', '🍊', '🍇', '🍌', '🥥', '🍉'];
-  const [state, setState] = usePersistentState<Match3State>('game_mem_match3_v7', { board: [], score: 0, gameOver: false });
-  const [selected, setSelected] = useState<number | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [matchedIndices, setMatchedIndices] = useState<Set<number>>(new Set());
-  const nextId = useRef(0);
-
-  const getNextId = () => {
-    nextId.current += 1;
-    return nextId.current;
-  };
-
-  const createRandomCell = (special: SpecialType = 'NONE', forcedType?: string): Match3Cell => ({
-    type: forcedType || FRUITS[Math.floor(Math.random() * FRUITS.length)],
-    special,
-    id: getNextId()
-  });
-
-  // Init Board
-  useEffect(() => { 
-    if (state.board.length === 0) {
-        initGame();
-    }
-    setIsProcessing(false); // Reset lock on mount
+  const spawn = useCallback((currentBoard: number[]) => {
+    const empty = currentBoard.map((v, i) => v === 0 ? i : -1).filter(i => i !== -1);
+    if (empty.length === 0) return currentBoard;
+    const newBoard = [...currentBoard];
+    newBoard[empty[Math.floor(Math.random() * empty.length)]] = Math.random() < 0.9 ? 2 : 4;
+    return newBoard;
   }, []);
 
-  const initGame = () => {
-      const b: Match3Cell[] = [];
-      for(let i=0; i<WIDTH*WIDTH; i++) b.push(createRandomCell());
-      setState({ board: b, score: 0, gameOver: false });
-      setSelected(null);
-      setMatchedIndices(new Set());
-      setIsProcessing(false);
-      SoundSynthesizer.play('move');
-  };
+  const reset = () => { const b = spawn(spawn(Array(16).fill(0))); setBoard(b); setScore(0); setGameOver(false); SoundSynthesizer.play('move'); };
+  useEffect(() => { if (board.every(v => v === 0)) reset(); }, []);
 
-  // --- GAME LOGIC FUNCTIONS ---
-  
-  const getSpecialAffectedIndices = (idx: number, type: SpecialType, board: Match3Cell[]) => {
-     const indices: number[] = [];
-     if (type === 'ROW') {
-         const rowStart = Math.floor(idx / WIDTH) * WIDTH;
-         for (let i=0; i<WIDTH; i++) indices.push(rowStart + i);
-     } else if (type === 'COL') {
-         const col = idx % WIDTH;
-         for (let i=0; i<WIDTH; i++) indices.push(i * WIDTH + col);
-     } else if (type === 'BOMB') {
-         const r = Math.floor(idx / WIDTH);
-         const c = idx % WIDTH;
-         for(let dr=-1; dr<=1; dr++) {
-             for(let dc=-1; dc<=1; dc++) {
-                 const nr = r+dr, nc = c+dc;
-                 if(nr>=0 && nr<WIDTH && nc>=0 && nc<WIDTH) indices.push(nr*WIDTH+nc);
-             }
-         }
-     } else if (type === 'RAINBOW') {
-         const r = Math.floor(idx / WIDTH);
-         const c = idx % WIDTH;
-         for(let dr=-1; dr<=1; dr++) {
-             for(let dc=-1; dc<=1; dc++) {
-                 const nr = r+dr, nc = c+dc;
-                 if(nr>=0 && nr<WIDTH && nc>=0 && nc<WIDTH) indices.push(nr*WIDTH+nc);
-             }
-         }
-     }
-     return indices;
-  };
+  const move = (dir: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT') => {
+    if (gameOver) return;
+    let newBoard = [...board];
+    let changed = false;
+    let gainedScore = 0;
 
-  const findMatches = (board: Match3Cell[]) => {
-    const matches = new Set<number>();
-    const specialCreations: { idx: number, type: SpecialType }[] = [];
+    const get = (r: number, c: number) => newBoard[r * 4 + c];
+    const set = (r: number, c: number, v: number) => { newBoard[r * 4 + c] = v; };
 
-    // Horizontal
-    for(let i=0; i<64; i++) {
-       if(i % WIDTH < WIDTH-2) {
-         if(board[i].type === board[i+1].type && board[i].type === board[i+2].type && board[i].type !== '') {
-            let matchLen = 3;
-            while(i % WIDTH + matchLen < WIDTH && board[i].type === board[i+matchLen].type) matchLen++;
-            
-            for(let k=0; k<matchLen; k++) matches.add(i+k);
-            if (matchLen >= 5) specialCreations.push({ idx: i + 2, type: 'RAINBOW' });
-            else if (matchLen === 4) specialCreations.push({ idx: i + 1, type: 'ROW' });
-         }
-       }
-    }
-
-    // Vertical
-    for(let i=0; i<WIDTH*(WIDTH-2); i++) {
-        if(board[i].type === board[i+WIDTH].type && board[i].type === board[i+WIDTH*2].type && board[i].type !== '') {
-            let matchLen = 3;
-            while(i + WIDTH*matchLen < 64 && board[i].type === board[i+WIDTH*matchLen].type) matchLen++;
-            
-            for(let k=0; k<matchLen; k++) matches.add(i+WIDTH*k);
-            if (matchLen >= 5) specialCreations.push({ idx: i + WIDTH*2, type: 'RAINBOW' });
-            else if (matchLen === 4) specialCreations.push({ idx: i + WIDTH*1, type: 'COL' });
+    for (let i = 0; i < 4; i++) {
+        let line = [];
+        for (let j = 0; j < 4; j++) {
+            const val = dir === 'LEFT' ? get(i, j) : dir === 'RIGHT' ? get(i, 3 - j) : dir === 'UP' ? get(j, i) : get(3 - j, i);
+            if (val !== 0) line.push(val);
         }
-    }
-    
-    // Expand Matches (Chain Reactions)
-    const expandedMatches = new Set(matches);
-    const toProcess = Array.from(matches);
-    
-    let head = 0;
-    while(head < toProcess.length) {
-        const idx = toProcess[head++];
-        const cell = board[idx];
-        if (cell.special !== 'NONE') {
-            const extra = getSpecialAffectedIndices(idx, cell.special, board);
-            extra.forEach(eIdx => {
-                if (!expandedMatches.has(eIdx)) {
-                    expandedMatches.add(eIdx);
-                    toProcess.push(eIdx);
-                }
-            });
+        for (let j = 0; j < line.length - 1; j++) {
+            if (line[j] === line[j + 1]) { line[j] *= 2; gainedScore += line[j]; line.splice(j + 1, 1); changed = true; SoundSynthesizer.play('merge'); }
+        }
+        while (line.length < 4) line.push(0);
+        for (let j = 0; j < 4; j++) {
+            const oldVal = dir === 'LEFT' ? get(i, j) : dir === 'RIGHT' ? get(i, 3 - j) : dir === 'UP' ? get(j, i) : get(3 - j, i);
+            if (oldVal !== line[j]) changed = true;
+            if (dir === 'LEFT') set(i, j, line[j]); else if (dir === 'RIGHT') set(i, 3 - j, line[j]); else if (dir === 'UP') set(j, i, line[j]); else set(3 - j, i, line[j]);
         }
     }
 
-    return { matches: expandedMatches, specialCreations };
-  };
-
-  const applyMatches = (board: Match3Cell[], matches: Set<number>, specialCreations: { idx: number, type: SpecialType }[]) => {
-      const newB = [...board];
-      // Create specials
-      specialCreations.forEach(sc => {
-          if (sc.type !== 'NONE') {
-              matches.delete(sc.idx); 
-              newB[sc.idx] = createRandomCell(sc.type, board[sc.idx].type);
-          }
-      });
-      // Clear matched
-      matches.forEach(idx => {
-          newB[idx] = { ...newB[idx], type: '' };
-      });
-      return newB;
-  };
-
-  const fillBoard = (b: Match3Cell[]) => {
-    const newB = [...b];
-    for(let i=0; i<WIDTH; i++) {
-       let emptySlots = 0;
-       for(let j=WIDTH-1; j>=0; j--) {
-          const idx = j*WIDTH + i;
-          if(newB[idx].type === '') { 
-              emptySlots++; 
-          } else if(emptySlots > 0) { 
-              newB[(j+emptySlots)*WIDTH + i] = newB[idx]; 
-              newB[idx] = { ...newB[idx], type: '' }; 
-          }
-       }
-       for(let j=0; j<emptySlots; j++) {
-           const specialChance = Math.random();
-           let special: SpecialType = 'NONE';
-           if (specialChance > 0.97) special = 'BOMB'; 
-           else if (specialChance > 0.94) special = 'ROW';
-           newB[j*WIDTH+i] = createRandomCell(special);
-       }
-    }
-    return newB;
-  };
-
-  // Check if any valid move exists
-  const hasValidMoves = (currentBoard: Match3Cell[]) => {
-    // If board is empty/processing, assume valid
-    if(currentBoard.length === 0) return true;
-
-    // 1. Rainbows are wildcards, so almost always valid unless board empty
-    if (currentBoard.some(c => c.special === 'RAINBOW')) return true;
-
-    // 2. Brute force check all swaps
-    for(let i=0; i<64; i++) {
-        const r = Math.floor(i/WIDTH);
-        const c = i % WIDTH;
-
-        // Try Right
-        if (c < WIDTH - 1) {
-            const right = i + 1;
-            // Swap
-            const b1 = [...currentBoard];
-            [b1[i], b1[right]] = [b1[right], b1[i]];
-            if (findMatches(b1).matches.size > 0) return true;
-        }
-
-        // Try Down
-        if (r < WIDTH - 1) {
-            const down = i + WIDTH;
-            const b2 = [...currentBoard];
-            [b2[i], b2[down]] = [b2[down], b2[i]];
-            if (findMatches(b2).matches.size > 0) return true;
-        }
-    }
-    return false;
-  };
-
-  // --- GAME LOOP ---
-  useEffect(() => {
-     if (state.board.length === 0 || state.gameOver) return;
-
-     let timer: any;
-     const processGame = async () => {
-         const { matches, specialCreations } = findMatches(state.board);
-         
-         if (matches.size > 0) {
-             setIsProcessing(true);
-             
-             // 1. Highlight Matches (Visual Feedback)
-             setMatchedIndices(matches);
-             await new Promise(r => setTimeout(r, 300)); // Show feedback animation
-
-             // 2. Clear & Score
-             const clearedBoard = applyMatches(state.board, matches, specialCreations);
-             setState(prev => ({ ...prev, board: clearedBoard, score: prev.score + matches.size * 10 }));
-             setMatchedIndices(new Set()); // Clear highlights
-             
-             SoundSynthesizer.play('merge');
-             if (specialCreations.length > 0) SoundSynthesizer.play('special');
-
-             // 3. Fill
-             await new Promise(r => setTimeout(r, 200));
-             const filledBoard = fillBoard(clearedBoard);
-             setState(prev => ({ ...prev, board: filledBoard }));
-             
-         } else {
-             // Stable state
-             setIsProcessing(false);
-             setMatchedIndices(new Set());
-             
-             // Deadlock check
-             if (!hasValidMoves(state.board)) {
-                 setState(prev => ({ ...prev, gameOver: true }));
-                 SoundSynthesizer.play('lose');
-                 recordPlay(state.score);
-             } else {
-                 // Save progress
-                 recordPlay(state.score); 
-             }
-         }
-     };
-
-     if (isProcessing || findMatches(state.board).matches.size > 0) {
-         timer = setTimeout(processGame, 100);
-     }
-
-     return () => clearTimeout(timer);
-  }, [state.board]);
-
-  const handleTap = async (i: number) => {
-    if(isProcessing || state.gameOver) return;
-    SoundSynthesizer.init();
-    
-    if(selected === null) {
-      setSelected(i);
-      SoundSynthesizer.play('select');
-    } else {
-      if (selected === i) {
-          setSelected(null);
-          return;
-      }
-
-      const diff = Math.abs(selected - i);
-      const isAdjacent = (diff === 1 && Math.floor(selected/WIDTH) === Math.floor(i/WIDTH)) || diff === WIDTH;
-      
-      if(isAdjacent) {
-        // Tentative Swap
-        let newB = [...state.board];
-        [newB[selected], newB[i]] = [newB[i], newB[selected]];
-        
-        setState(prev => ({ ...prev, board: newB }));
-        setSelected(null);
+    if (changed) {
+        newBoard = spawn(newBoard);
+        setBoard(newBoard);
+        setScore(score + gainedScore);
         SoundSynthesizer.play('move');
-
-        // Check Validity
-        const cellA = state.board[selected];
-        const cellB = state.board[i];
         
-        const isRainbowSwap = cellA.special === 'RAINBOW' || cellB.special === 'RAINBOW';
-        
-        if (isRainbowSwap) {
-             setIsProcessing(true);
-             const rainbowIdx = cellA.special === 'RAINBOW' ? i : selected;
-             const targetIdx = cellA.special === 'RAINBOW' ? selected : i;
-             const targetColor = newB[targetIdx].type;
-             
-             // Rainbow Feedback
-             const toClear = new Set<number>();
-             toClear.add(rainbowIdx);
-             newB.forEach((c, idx) => { if(c.type === targetColor) toClear.add(idx); });
-             setMatchedIndices(toClear);
-             
-             await new Promise(r => setTimeout(r, 400));
-             
-             const finalB = [...newB];
-             toClear.forEach(idx => { finalB[idx] = { ...finalB[idx], type: '' }; });
-             
-             setState(prev => ({ ...prev, board: finalB, score: prev.score + toClear.size * 20 }));
-             setMatchedIndices(new Set());
-             SoundSynthesizer.play('special');
-             return;
-        }
-
-        const { matches } = findMatches(newB);
-        if (matches.size > 0) {
-            setIsProcessing(true); 
-        } else {
-            // INVALID MOVE - UNDO
-            setIsProcessing(true); 
-            await new Promise(r => setTimeout(r, 250));
-            SoundSynthesizer.play('lose'); 
-            
-            const revertedB = [...newB];
-            [revertedB[selected], revertedB[i]] = [revertedB[i], revertedB[selected]];
-            setState(prev => ({ ...prev, board: revertedB }));
-            setIsProcessing(false);
-        }
-      } else {
-        setSelected(i);
-        SoundSynthesizer.play('select');
-      }
+        const canMove = () => {
+          if (newBoard.includes(0)) return true;
+          for (let i = 0; i < 4; i++) {
+            for (let j = 0; j < 3; j++) {
+              if (newBoard[i * 4 + j] === newBoard[i * 4 + j + 1]) return true;
+              if (newBoard[j * 4 + i] === newBoard[(j + 1) * 4 + i]) return true;
+            }
+          }
+          return false;
+        };
+        if (!canMove()) { setGameOver(true); SoundSynthesizer.play('lose'); onGameOver(score + gainedScore); recordPlay(score + gainedScore); }
     }
   };
 
-  const getSpecialIcon = (special: SpecialType) => {
-      switch(special) {
-          case 'BOMB': return <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10"><Bomb size={24} className="text-gray-900 drop-shadow-md animate-pulse" /></div>;
-          case 'ROW': return <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10"><Rocket size={24} className="text-white drop-shadow-md rotate-90" /></div>;
-          case 'COL': return <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10"><Rocket size={24} className="text-white drop-shadow-md" /></div>;
-          case 'RAINBOW': return <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10"><Sparkles size={28} className="text-yellow-200 drop-shadow-lg animate-spin" /></div>;
-          default: return null;
-      }
-  };
-
-  const getSpecialStyle = (special: SpecialType) => {
-      switch(special) {
-          case 'BOMB': return 'bg-gray-400/50 ring-2 ring-gray-600';
-          case 'ROW': return 'bg-blue-400/50 ring-2 ring-blue-300';
-          case 'COL': return 'bg-blue-400/50 ring-2 ring-blue-300';
-          case 'RAINBOW': return 'bg-gradient-to-br from-red-400 via-yellow-400 to-purple-500 opacity-90 ring-2 ring-white';
-          default: return '';
-      }
-  };
+  const { onTouchStart, onTouchEnd } = useSwipe(move);
 
   return (
-    <div className="flex flex-col items-center justify-center h-full relative">
-      <div className="flex justify-between w-full max-w-[350px] mb-4 glass-panel p-3 rounded-2xl items-center">
-        <h2 className="text-xl font-bold dark:text-white px-2">消消乐</h2>
-        <div className="flex gap-3 items-center">
-            <div className="bg-primary/10 px-4 py-1 rounded-full text-primary font-mono text-xl font-bold">{state.score}</div>
-            <button onClick={initGame} className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-500 hover:text-primary active:rotate-180 transition-all"><RotateCcw size={18} /></button>
-        </div>
+    <div className="flex flex-col items-center h-full w-full justify-center" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      <div className="w-full max-w-[320px] flex justify-between mb-8">
+         <div className="glass-panel px-4 py-2 rounded-xl"><span className="text-[10px] text-gray-400 font-bold uppercase">SCORE</span><p className="text-2xl font-black text-primary">{score}</p></div>
+         <button onClick={reset} className="p-4 bg-white/50 dark:bg-gray-800/50 rounded-2xl shadow-lg"><RefreshCw size={24}/></button>
       </div>
-      
-      <div className="relative">
-         <div className="grid grid-cols-8 gap-0.5 bg-white/30 dark:bg-gray-800/30 p-1.5 rounded-2xl shadow-xl backdrop-blur-md border border-white/40 aspect-square mx-auto" style={{ width: '100%', maxWidth: '380px' }}>
-            {state.board.map((cell, i) => (
-            <div key={`${cell.id}-${i}`} onClick={() => handleTap(i)} 
-                className={`w-full h-full flex items-center justify-center text-3xl rounded-md cursor-pointer transition-all duration-300 select-none relative
-                ${selected === i ? 'bg-white/80 shadow-[0_0_15px_rgba(255,255,255,0.8)] scale-110 z-20 ring-4 ring-primary' : 'hover:bg-white/20 active:scale-95'} 
-                ${cell.type === '' ? 'scale-0 opacity-0' : 'scale-100 opacity-100'}
-                ${matchedIndices.has(i) ? 'scale-0 opacity-0 bg-white/50 rotate-180' : ''} 
-                ${getSpecialStyle(cell.special)}
-                `}>
-                <span className={`drop-shadow-sm transition-transform duration-300 ${matchedIndices.has(i) ? 'scale-150' : ''}`}>{cell.type}</span>
-                {getSpecialIcon(cell.special)}
-            </div>
-            ))}
-         </div>
-
-         {state.gameOver && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/30 backdrop-blur-[3px] rounded-2xl">
-             <div className="bg-white/90 dark:bg-gray-800/90 p-6 rounded-3xl shadow-2xl flex flex-col items-center animate-fade-in border border-white/20">
-                <div className="text-5xl mb-4 animate-bounce"><Frown size={48} className="text-gray-400"/></div>
-                <h3 className="text-2xl font-bold mb-2 text-red-500">无步可走</h3>
-                <p className="text-gray-500 mb-6 font-bold">最终得分: {state.score}</p>
-                <button onClick={initGame} className="px-8 py-3 bg-primary text-white rounded-full font-bold shadow-lg shadow-primary/30 hover:scale-105 transition-transform active:scale-95">再来一局</button>
-             </div>
-          </div>
-         )}
-      </div>
-
-      <div className="mt-6 flex flex-col items-center gap-2 h-12 justify-start w-full relative">
-         <div className="absolute top-0 w-full flex justify-center">
-            {isProcessing && <div className="text-primary font-bold animate-pulse text-sm bg-white/50 px-3 py-1 rounded-full shadow-sm">消除中...</div>}
-         </div>
+      <div className="relative w-[320px] h-[320px] bg-slate-200 dark:bg-slate-800 p-3 rounded-2xl shadow-2xl grid grid-cols-4 gap-3">
+         {board.map((v, i) => (
+           <div key={i} className={`w-full h-full rounded-xl flex items-center justify-center font-black transition-all duration-200 shadow-sm ${v === 0 ? 'bg-slate-300/50 dark:bg-slate-700/50' : v <= 4 ? 'bg-white dark:bg-slate-500 text-slate-800' : v <= 16 ? 'bg-orange-100 text-orange-600' : v <= 64 ? 'bg-orange-500 text-white' : 'bg-primary text-white scale-105 shadow-primary/30'}`} style={{ fontSize: v > 1000 ? '1.2rem' : v > 100 ? '1.5rem' : '1.8rem' }}>{v || ''}</div>
+         ))}
+         {gameOver && (<div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center text-white z-20 rounded-2xl backdrop-blur-sm"><h2 className="text-3xl font-bold mb-6">无法移动</h2><button onClick={reset} className="bg-primary px-8 py-3 rounded-full font-bold shadow-lg">重新开始</button></div>)}
       </div>
     </div>
   );
 };
 
 // --- PARKOUR ---
-type ParkourState = { highScore: number; };
-const ParkourGame = () => {
+const ParkourGame = ({ onGameOver }: { onGameOver: (score: number) => void }) => {
   const { recordPlay } = useGameStats(GameType.PARKOUR);
-  const [state, setState] = usePersistentState<ParkourState>('game_mem_parkour', { highScore: 0 });
   const [isPlaying, setIsPlaying] = useState(false);
+  const [gameOver, setGameOver] = useState(false);
   const [score, setScore] = useState(0);
-  const [dinoY, setDinoY] = useState(0);
-  const [obstacles, setObstacles] = useState<{id: number, x: number}[]>([]);
-  const gameRef = useRef({ velocity: 0, gravity: 0.6, gameLoop: 0, dinoY: 0, isPlaying: false });
+  const [charPos, setCharPos] = useState(0);
+  const [obstacles, setObstacles] = useState<{x: number, id: number}[]>([]);
+  const jumpRef = useRef(false);
+  const frameRef = useRef(0);
+
+  const reset = () => { setGameOver(false); setIsPlaying(true); setScore(0); setCharPos(0); setObstacles([]); frameRef.current = 0; SoundSynthesizer.play('move'); };
+
+  useEffect(() => {
+    if (!isPlaying || gameOver) return;
+    const interval = setInterval(() => {
+      setObstacles(prev => {
+        const next = prev.map(o => ({ ...o, x: o.x - 2 })).filter(o => o.x > -10);
+        if (frameRef.current % 100 === 0) next.push({ x: 100, id: Date.now() });
+        return next;
+      });
+      setScore(s => s + 1);
+      frameRef.current++;
+    }, 20);
+    return () => clearInterval(interval);
+  }, [isPlaying, gameOver]);
+
+  useEffect(() => {
+    if (obstacles.some(o => o.x > 5 && o.x < 15 && charPos < 20)) {
+      setGameOver(true); SoundSynthesizer.play('lose'); onGameOver(score); recordPlay(score);
+    }
+  }, [obstacles, charPos, score, onGameOver, recordPlay]);
 
   const jump = () => {
-    SoundSynthesizer.init();
-    if(gameRef.current.dinoY <= 0.5 && gameRef.current.isPlaying) {
-      gameRef.current.velocity = 11; 
-      SoundSynthesizer.play('jump');
-    } else if(!gameRef.current.isPlaying) {
-      startGame();
-    }
+    if (gameOver) { reset(); return; }
+    if (!isPlaying) { setIsPlaying(true); return; }
+    if (jumpRef.current) return;
+    jumpRef.current = true; SoundSynthesizer.play('jump');
+    let h = 0; let up = true;
+    const anim = setInterval(() => {
+        if (up) { h += 5; if (h >= 50) up = false; } else { h -= 5; if (h <= 0) { h = 0; jumpRef.current = false; clearInterval(anim); } }
+        setCharPos(h);
+    }, 25);
   };
-
-  const startGame = () => {
-    setIsPlaying(true);
-    gameRef.current.isPlaying = true;
-    setScore(0);
-    setObstacles([{id: 1, x: 100}]);
-    gameRef.current.velocity = 0;
-    gameRef.current.dinoY = 0;
-    setDinoY(0);
-    gameRef.current.gameLoop = requestAnimationFrame(update);
-    recordPlay(0);
-    SoundSynthesizer.play('move');
-  };
-
-  const update = () => {
-    if(!gameRef.current.isPlaying) return;
-
-    gameRef.current.velocity -= gameRef.current.gravity;
-    let newY = gameRef.current.dinoY + gameRef.current.velocity;
-    if(newY <= 0) { newY = 0; gameRef.current.velocity = 0; }
-    gameRef.current.dinoY = newY;
-    setDinoY(newY);
-
-    setObstacles(prev => {
-       const next = prev.map(o => ({...o, x: o.x - 0.9})).filter(o => o.x > -10); 
-       if(prev.length === 0 || (prev[prev.length-1].x < 55 && Math.random() < 0.02)) {
-          next.push({id: Date.now(), x: 100});
-       }
-       if(next.length === 0) next.push({id: Date.now(), x: 100});
-       const dinoLeft = 10; const dinoRight = 18; const obsWidth = 8;
-       const hit = next.some(o => { return (o.x < dinoRight && (o.x + obsWidth) > dinoLeft) && gameRef.current.dinoY < 10; });
-       if(hit) {
-          gameRef.current.isPlaying = false;
-          setIsPlaying(false);
-          setScore(currentScore => {
-             recordPlay(currentScore);
-             if (currentScore > state.highScore) setState({ highScore: currentScore });
-             return currentScore;
-          });
-          cancelAnimationFrame(gameRef.current.gameLoop);
-          SoundSynthesizer.play('lose');
-       }
-       return next;
-    });
-
-    setScore(s => {
-       if (s % 100 === 0 && s > 0) SoundSynthesizer.play('score');
-       return s + 1;
-    });
-    if(gameRef.current.isPlaying) gameRef.current.gameLoop = requestAnimationFrame(update);
-  };
-
-  useEffect(() => { return () => cancelAnimationFrame(gameRef.current.gameLoop); }, []);
 
   return (
-    <div className="flex flex-col items-center w-full h-full justify-center" onClick={jump}>
-       <div className="flex justify-between w-full max-w-[600px] mb-2 px-2"><div className="text-gray-500 font-bold">最高分: {state.highScore}</div></div>
-       <div className="w-full max-w-[600px] h-64 bg-white/80 dark:bg-gray-800/80 rounded-2xl overflow-hidden relative border-b-8 border-gray-300 dark:border-gray-600 shadow-2xl select-none backdrop-blur-sm">
-          <div className="absolute top-4 right-4 text-2xl font-mono font-bold text-gray-400">{score}</div>
-          <div className="absolute left-[10%] w-10 h-10 bg-primary rounded-lg transition-transform duration-75 shadow-lg shadow-primary/40 flex items-center justify-center" style={{ bottom: `${dinoY * 3}px` }}><Activity className="text-white" size={24} /></div>
-          {obstacles.map(o => (<div key={o.id} className="absolute bottom-0 w-8 h-12 bg-gray-600 dark:bg-gray-400 rounded-t-lg shadow-md" style={{ left: `${o.x}%` }} />))}
-          {!isPlaying && (<div className="absolute inset-0 bg-black/40 flex items-center justify-center backdrop-blur-sm z-10"><button onClick={(e) => { e.stopPropagation(); startGame(); }} className="bg-white text-primary px-8 py-3 rounded-full font-bold shadow-2xl flex items-center gap-2 hover:scale-105 transition-transform"><Play size={20} fill="currentColor" /> {score > 0 ? '重试' : '开始游戏'}</button></div>)}
+    <div className="flex flex-col items-center h-full w-full justify-center overflow-hidden" onClick={jump}>
+       <div className="glass-panel px-6 py-2 rounded-full mb-12"><span className="text-xs text-gray-400 font-bold mr-2">RUN</span><span className="text-2xl font-black text-primary tabular-nums">{score}</span></div>
+       <div className="relative w-full max-w-sm h-48 bg-slate-50 dark:bg-slate-900 border-b-4 border-slate-300 dark:border-slate-700 overflow-hidden rounded-t-3xl">
+          <div className="absolute left-10 bottom-0 w-8 h-12 bg-primary rounded-t-lg transition-all duration-75 flex items-center justify-center shadow-lg" style={{ bottom: charPos }}>
+             <Activity className="text-white/50" size={16}/>
+          </div>
+          {obstacles.map(o => (
+            <div key={o.id} className="absolute bottom-0 w-6 h-8 bg-slate-800 dark:bg-slate-200 rounded-sm" style={{ left: `${o.x}%` }} />
+          ))}
+          {!isPlaying && !gameOver && <div className="absolute inset-0 flex items-center justify-center bg-black/10 backdrop-blur-sm text-gray-700 font-black text-xl">点击开始跑酷</div>}
+          {gameOver && <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm text-white"><h2 className="text-2xl font-bold mb-4">撞到了障碍物</h2><button className="bg-primary px-6 py-2 rounded-full font-bold">重新开始</button></div>}
        </div>
-       <p className="mt-6 text-gray-400 font-medium">点击屏幕跳跃</p>
     </div>
   );
 };
 
-// --- WOODEN FISH (Digital Merit) ---
+// --- WOODEN FISH ---
 const WoodenFishGame = () => {
-  const { recordPlay } = useGameStats(GameType.WOODEN_FISH);
-  const [count, setCount] = useState(() => {
-    const saved = localStorage.getItem('game_wooden_fish_count');
-    return saved ? parseInt(saved) : 0;
-  });
-  const [animating, setAnimating] = useState(false);
-  const [floats, setFloats] = useState<{id: number, x: number, y: number}[]>([]);
-  const idRef = useRef(0);
-
-  useEffect(() => {
-    localStorage.setItem('game_wooden_fish_count', count.toString());
-  }, [count]);
+  const [count, setCount] = useState(0);
+  const [scale, setScale] = useState(1);
+  const [pops, setPops] = useState<{id: number, x: number, y: number}[]>([]);
 
   const tap = (e: React.MouseEvent | React.TouchEvent) => {
-    // Prevent default to avoid double firing on touch devices if mixed events
-    // e.preventDefault(); 
-    
-    SoundSynthesizer.init();
+    setCount(c => c + 1);
+    setScale(0.9);
     SoundSynthesizer.play('wood');
-    if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(50);
-
-    setAnimating(true);
-    setTimeout(() => setAnimating(false), 100);
-
-    setCount(c => {
-        const newC = c + 1;
-        // Record play occasionally to track usage
-        if (newC % 10 === 0) recordPlay(newC);
-        return newC;
-    });
-
-    // Float Animation
-    const id = idRef.current++;
-    // Get click position or random position near center
-    let clientX, clientY;
-    if ('touches' in e) {
-       clientX = e.touches[0].clientX;
-       clientY = e.touches[0].clientY;
-    } else {
-       clientX = (e as React.MouseEvent).clientX;
-       clientY = (e as React.MouseEvent).clientY;
-    }
-    
-    // Adjust relative to container center if desired, or just use click pos
-    // Using click pos is more dynamic
-    setFloats(prev => [...prev, { id, x: clientX, y: clientY }]);
-    setTimeout(() => {
-        setFloats(prev => prev.filter(f => f.id !== id));
-    }, 1000);
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    const id = Date.now();
+    setPops(p => [...p, { id, x: clientX, y: clientY }]);
+    setTimeout(() => { setScale(1); setPops(p => p.filter(item => item.id !== id)); }, 100);
+    if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(20);
   };
 
   return (
-    <div className="flex flex-col items-center justify-center h-full w-full select-none" onTouchStart={(e) => { /* prevent zoom */ }}>
-       <div className="absolute top-8 text-center">
-          <p className="text-gray-500 font-bold mb-1 uppercase tracking-widest text-xs">当前功德</p>
-          <h2 className="text-5xl font-mono font-bold text-gray-800 dark:text-white tabular-nums">{count}</h2>
+    <div className="flex flex-col items-center justify-center h-full w-full cursor-pointer touch-none" onMouseDown={tap} onTouchStart={tap}>
+       <div className="mb-20 text-center animate-fade-in">
+          <p className="text-gray-400 dark:text-gray-500 font-bold uppercase tracking-widest text-sm mb-2">功德</p>
+          <h1 className="text-7xl font-black text-primary drop-shadow-xl">{count}</h1>
        </div>
-
-       <div 
-         className={`
-            w-64 h-64 bg-amber-800 rounded-full shadow-[0_20px_50px_-12px_rgba(146,64,14,0.5)]
-            flex items-center justify-center cursor-pointer
-            relative transition-transform duration-100
-            ${animating ? 'scale-95' : 'scale-100'}
-         `}
-         onMouseDown={tap}
-         onTouchStart={tap}
-       >
-          <div className="w-56 h-56 bg-amber-700 rounded-full shadow-inner border-4 border-amber-900/30 flex items-center justify-center relative overflow-hidden">
-             {/* Simple Wood Texture CSS */}
-             <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_30%_30%,#fff,transparent)]"></div>
-             {/* "Eye" of the wooden fish */}
-             <div className="w-32 h-2 bg-black/20 rounded-full absolute top-1/3"></div>
-             <div className="w-40 h-2 bg-black/20 rounded-full absolute bottom-1/3"></div>
-             <Music size={80} className="text-amber-900/40" />
+       <div className="relative transform transition-transform duration-100" style={{ transform: `scale(${scale})` }}>
+          <div className="w-48 h-48 bg-slate-800 dark:bg-slate-100 rounded-[3rem] shadow-[inset_-10px_-10px_20px_rgba(0,0,0,0.5),10px_10px_20px_rgba(0,0,0,0.2)] dark:shadow-[inset_-10px_-10px_20px_rgba(255,255,255,0.5),10px_10px_20px_rgba(0,0,0,0.1)] flex items-center justify-center">
+             <Music size={64} className="text-white dark:text-slate-800 opacity-20" />
           </div>
        </div>
-
-       <p className="mt-12 text-gray-400 font-medium animate-pulse">点击积攒功德</p>
-
-       {/* Floating Text Container */}
-       {floats.map(f => (
-           <div 
-             key={f.id}
-             className="fixed text-xl font-bold text-white pointer-events-none animate-float-up z-50"
-             style={{ left: f.x, top: f.y, textShadow: '0 2px 4px rgba(0,0,0,0.2)' }}
-           >
-             功德 +1
-           </div>
+       <p className="mt-20 text-gray-400 font-medium">心平气和，积攒功德</p>
+       {pops.map(p => (
+         <span key={p.id} className="fixed pointer-events-none text-xl font-bold text-primary animate-float opacity-0" style={{ left: p.x, top: p.y }}>功德 +1</span>
        ))}
-       <style>{`
-         @keyframes floatUp {
-           0% { opacity: 1; transform:translate(-50%, -50%) scale(1); }
-           100% { opacity: 0; transform:translate(-50%, -150px) scale(1.5); }
-         }
-         .animate-float-up {
-           animation: floatUp 0.8s ease-out forwards;
-         }
-       `}</style>
     </div>
   );
 };
 
 // --- BUBBLE WRAP ---
 const BubbleWrapGame = () => {
-    const { recordPlay } = useGameStats(GameType.BUBBLE_WRAP);
-    const ROWS = 8;
-    const COLS = 6;
-    const [bubbles, setBubbles] = useState<boolean[]>(Array(ROWS * COLS).fill(false)); // false = unpopped
-
-    const pop = (index: number) => {
-        if (bubbles[index]) return; // Already popped
-
-        SoundSynthesizer.init();
-        SoundSynthesizer.play('pop');
-        if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(50);
-
-        const newB = [...bubbles];
-        newB[index] = true;
-        setBubbles(newB);
-        
-        // Check complete
-        if (newB.every(b => b)) {
-            recordPlay(100);
-        }
-    };
-
-    const reset = () => {
-        setBubbles(Array(ROWS * COLS).fill(false));
-        SoundSynthesizer.play('move');
-    };
-
-    return (
-        <div className="flex flex-col items-center justify-center h-full w-full">
-            <div className="flex justify-between w-full max-w-[320px] mb-4">
-                 <h2 className="text-xl font-bold dark:text-white">捏泡泡</h2>
-                 <button onClick={reset} className="p-2 bg-white/50 dark:bg-gray-800/50 rounded-full hover:bg-white hover:shadow-md transition-all text-gray-600 dark:text-gray-300">
-                    <RefreshCw size={20} />
-                 </button>
-            </div>
-
-            <div className="glass-panel p-4 rounded-2xl shadow-xl bg-blue-50/50 dark:bg-gray-800/50">
-                <div className="grid grid-cols-6 gap-3">
-                    {bubbles.map((popped, i) => (
-                        <button
-                            key={i}
-                            onMouseDown={() => pop(i)}
-                            onTouchStart={(e) => { e.preventDefault(); pop(i); }}
-                            className={`
-                                w-10 h-10 rounded-full transition-all duration-200 relative
-                                flex items-center justify-center
-                                ${popped 
-                                    ? 'bg-blue-100/30 shadow-inner scale-90' 
-                                    : 'bg-gradient-to-br from-blue-100 to-blue-300 shadow-[2px_4px_6px_rgba(0,0,0,0.1),inset_2px_2px_4px_rgba(255,255,255,0.8)] hover:scale-105 active:scale-95 cursor-pointer'
-                                }
-                            `}
-                        >
-                            {!popped && <div className="absolute top-2 left-2 w-3 h-2 bg-white/60 rounded-full rotate-45 blur-[1px]"></div>}
-                        </button>
-                    ))}
-                </div>
-            </div>
-            
-            <p className="mt-6 text-gray-400 text-sm font-medium">解压神器，尽情释放</p>
-        </div>
-    );
+  const [bubbles, setBubbles] = useState(Array(30).fill(false));
+  const pop = (i: number) => {
+    if (bubbles[i]) return;
+    const newBubbles = [...bubbles];
+    newBubbles[i] = true;
+    setBubbles(newBubbles);
+    SoundSynthesizer.play('pop');
+    if (window.navigator && window.navigator.vibrate) window.navigator.vibrate([10, 5, 10]);
+  };
+  return (
+    <div className="flex flex-col items-center justify-center h-full w-full p-6">
+       <div className="grid grid-cols-5 gap-4 glass-panel p-6 rounded-[2.5rem] shadow-xl">
+          {bubbles.map((b, i) => (
+            <div key={i} onClick={() => pop(i)} className={`w-12 h-12 rounded-full transition-all duration-300 border-2 ${b ? 'bg-transparent border-gray-200 dark:border-gray-800 scale-90' : 'bg-cyan-100 dark:bg-cyan-900/30 border-cyan-200 dark:border-cyan-800 shadow-md active:scale-110 active:bg-cyan-200'}`} />
+          ))}
+       </div>
+       <button onClick={() => setBubbles(Array(30).fill(false))} className="mt-12 flex items-center gap-2 bg-primary text-white px-8 py-3 rounded-full font-bold shadow-lg shadow-primary/30 active:scale-95 transition-transform"><RotateCcw size={18}/> 全部恢复</button>
+    </div>
+  );
 };
 
+// --- MATCH 3 ---
+const FRUITS = ['🍎', '🍊', '🍋', '🍇', '🍓', '🍒'];
+const Match3Game = ({ onGameOver }: { onGameOver: (score: number) => void }) => {
+  const SIZE = 7;
+  const { recordPlay } = useGameStats(GameType.MATCH3);
+  const [board, setBoard] = useState<string[]>([]);
+  const [score, setScore] = useState(0);
+  const [selected, setSelected] = useState<number | null>(null);
 
-// --- MAIN RUNNER ---
-export const GameRunner = () => {
-  const { type } = useParams<{ type: string }>();
-  const navigate = useNavigate();
-  const { recordPlay } = useGameStats(type || '');
-  const [showTutorial, setShowTutorial] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  const init = useCallback(() => {
+    let b = Array.from({ length: SIZE * SIZE }, () => FRUITS[Math.floor(Math.random() * FRUITS.length)]);
+    setBoard(b); setScore(0); SoundSynthesizer.play('move');
+  }, []);
+  useEffect(() => init(), [init]);
 
-  const toggleSound = () => {
-    SoundSynthesizer.enabled = !SoundSynthesizer.enabled;
-    setSoundEnabled(SoundSynthesizer.enabled);
+  const swap = (i1: number, i2: number) => {
+    const b = [...board]; const temp = b[i1]; b[i1] = b[i2]; b[i2] = temp;
+    setBoard(b); check(b); SoundSynthesizer.play('move');
   };
 
-  const renderGame = () => {
-    switch (type) {
-      case GameType.SNAKE: return <SnakeGame onGameOver={recordPlay} />;
-      case GameType.G2048: return <Game2048 onMove={(s) => {}} />;
-      case GameType.MINESWEEPER: return <MinesweeperGame />;
-      case GameType.GOMOKU: return <GomokuGame />;
-      case GameType.PARKOUR: return <ParkourGame />;
-      case GameType.MATCH3: return <Match3Game />;
-      case GameType.WOODEN_FISH: return <WoodenFishGame />;
-      case GameType.BUBBLE_WRAP: return <BubbleWrapGame />;
-      default: return <div>Game not found</div>;
+  const check = (b: string[]) => {
+    let toRemove = new Set<number>();
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE - 2; c++) {
+        const i = r * SIZE + c;
+        if (b[i] && b[i] === b[i+1] && b[i] === b[i+2]) { toRemove.add(i); toRemove.add(i+1); toRemove.add(i+2); }
+      }
+    }
+    for (let c = 0; c < SIZE; c++) {
+      for (let r = 0; r < SIZE - 2; r++) {
+        const i = r * SIZE + c;
+        if (b[i] && b[i] === b[(r+1)*SIZE+c] && b[i] === b[(r+2)*SIZE+c]) { toRemove.add(i); toRemove.add((r+1)*SIZE+c); toRemove.add((r+2)*SIZE+c); }
+      }
+    }
+    if (toRemove.size > 0) {
+      const nextBoard = b.map((v, i) => toRemove.has(i) ? '' : v);
+      setBoard(nextBoard); setScore(s => s + toRemove.size * 10);
+      SoundSynthesizer.play('score');
+      setTimeout(() => fill(nextBoard), 400);
+    }
+  };
+
+  const fill = (b: string[]) => {
+    const next = [...b];
+    for (let c = 0; c < SIZE; c++) {
+      let empty = 0;
+      for (let r = SIZE - 1; r >= 0; r--) {
+        const i = r * SIZE + c;
+        if (next[i] === '') empty++;
+        else if (empty > 0) { next[(r + empty) * SIZE + c] = next[i]; next[i] = ''; }
+      }
+      for (let r = 0; r < empty; r++) next[r * SIZE + c] = FRUITS[Math.floor(Math.random() * FRUITS.length)];
+    }
+    setBoard(next); setTimeout(() => check(next), 400);
+  };
+
+  const handleClick = (i: number) => {
+    if (selected === null) setSelected(i);
+    else {
+      const r1 = Math.floor(selected / SIZE), c1 = selected % SIZE;
+      const r2 = Math.floor(i / SIZE), c2 = i % SIZE;
+      if (Math.abs(r1 - r2) + Math.abs(c1 - c2) === 1) { swap(selected, i); setSelected(null); }
+      else setSelected(i);
     }
   };
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      <div className="p-4 flex items-center justify-between z-10">
-        <div className="flex items-center">
-          <button onClick={() => navigate('/games')} className="p-2 -ml-2 text-gray-600 dark:text-gray-300 glass-panel rounded-full hover:bg-white/40 transition-colors">
-            <ChevronLeft size={28} />
-          </button>
-          <h1 className="text-xl font-bold ml-4 text-gray-800 dark:text-white capitalize drop-shadow-sm">{type === GameType.WOODEN_FISH ? '电子木鱼' : type === GameType.BUBBLE_WRAP ? '捏泡泡' : type}</h1>
-        </div>
-        <div className="flex gap-2">
-           <button onClick={toggleSound} className="p-2 glass-panel rounded-full text-gray-600 dark:text-gray-300">
-             {soundEnabled ? <Volume2 size={24} /> : <VolumeX size={24} />}
-           </button>
-           <button onClick={() => setShowTutorial(true)} className="p-2 glass-panel rounded-full text-gray-600 dark:text-gray-300">
-             <HelpCircle size={24} />
-           </button>
-        </div>
+    <div className="flex flex-col items-center h-full w-full justify-center p-4">
+       <div className="glass-panel px-6 py-2 rounded-full mb-8 font-black text-primary text-xl shadow-lg">{score}</div>
+       <div className="grid grid-cols-7 gap-1 p-2 glass-panel rounded-2xl shadow-2xl">
+          {board.map((f, i) => (
+            <div key={i} onClick={() => handleClick(i)} className={`w-10 h-10 flex items-center justify-center text-xl cursor-pointer rounded-lg transition-all ${selected === i ? 'bg-primary/20 scale-110 shadow-lg' : 'hover:bg-white/10'}`}>{f}</div>
+          ))}
+       </div>
+    </div>
+  );
+};
+
+// --- MAIN RUNNER COMPONENT ---
+export const GameRunner = () => {
+  const { type } = useParams<{ type: string }>();
+  const navigate = useNavigate();
+  const [showTutorial, setShowTutorial] = useState(false);
+  const tutorial = GAME_TUTORIALS[type || ''] || { title: '玩法介绍', content: '暂无说明' };
+
+  const handleGameOver = (score: number) => {
+    // Score updates are handled inside components for persistence
+  };
+
+  const renderGame = () => {
+    switch (type) {
+      case GameType.SNAKE: return <SnakeGame onGameOver={handleGameOver} />;
+      case GameType.G2048: return <G2048Game onGameOver={handleGameOver} />;
+      case GameType.MINESWEEPER: return <MinesweeperGame />;
+      case GameType.GOMOKU: return <GomokuGame />;
+      case GameType.PARKOUR: return <ParkourGame onGameOver={handleGameOver} />;
+      case GameType.MATCH3: return <Match3Game onGameOver={handleGameOver} />;
+      case GameType.WOODEN_FISH: return <WoodenFishGame />;
+      case GameType.BUBBLE_WRAP: return <BubbleWrapGame />;
+      case GameType.TETRIS: return <TetrisGame onGameOver={handleGameOver} />;
+      default: return <div className="text-white">游戏正在开发中...</div>;
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-slate-50 dark:bg-slate-950 overflow-hidden">
+      {/* Game Header */}
+      <div className="p-4 flex justify-between items-center bg-white/50 dark:bg-black/20 backdrop-blur-md">
+        <button onClick={() => navigate(-1)} className="p-2 text-gray-600 dark:text-gray-300 hover:bg-black/5 rounded-full"><ChevronLeft size={28} /></button>
+        <button onClick={() => setShowTutorial(true)} className="p-2 text-gray-400 hover:text-primary"><HelpCircle size={24} /></button>
       </div>
-      
-      <div className="flex-1 flex items-center justify-center p-4 relative w-full">
-        {renderGame()}
+
+      <div className="flex-1 flex flex-col items-center justify-center p-4 relative">
+         {renderGame()}
       </div>
 
       {/* Tutorial Modal */}
-      {showTutorial && type && GAME_TUTORIALS[type] && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/50 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-gray-800 rounded-3xl p-6 shadow-2xl max-w-sm w-full relative">
-            <button onClick={() => setShowTutorial(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
-              <X size={24} />
-            </button>
-            <h3 className="text-xl font-bold mb-4 text-primary flex items-center gap-2">
-              <HelpCircle size={20} />
-              {GAME_TUTORIALS[type].title}
-            </h3>
-            <p className="text-gray-600 dark:text-gray-300 leading-relaxed">
-              {GAME_TUTORIALS[type].content}
-            </p>
-            <button onClick={() => setShowTutorial(false)} className="w-full mt-6 bg-primary text-white py-3 rounded-xl font-bold">
-              明白了
-            </button>
+      {showTutorial && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="glass-panel w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl relative">
+             <button onClick={() => setShowTutorial(false)} className="absolute top-6 right-6 p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><X size={24}/></button>
+             <h2 className="text-2xl font-black mb-6 text-gray-800 dark:text-white flex items-center gap-2"><Sparkles className="text-primary" /> {tutorial.title}</h2>
+             <p className="text-gray-600 dark:text-gray-300 leading-relaxed font-medium">{tutorial.content}</p>
+             <button onClick={() => setShowTutorial(false)} className="w-full mt-8 bg-primary text-white py-4 rounded-2xl font-bold shadow-lg shadow-primary/30 active:scale-95 transition-transform">我明白了</button>
           </div>
         </div>
       )}

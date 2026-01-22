@@ -1,12 +1,14 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GameType } from '../types';
-import { Grid3X3, Bomb, Trophy, Activity, Ghost, Hash, ClipboardList, X, Music, CircleDashed } from 'lucide-react';
+import { Grid3X3, Bomb, Trophy, Activity, Ghost, Hash, ClipboardList, X, Music, CircleDashed, LayoutGrid } from 'lucide-react';
 
 const GAMES_LIST = [
   { id: GameType.SNAKE, name: "贪吃蛇", color: "from-green-400 to-emerald-600", shadow: "shadow-green-500/30", icon: Ghost, desc: "经典怀旧" },
   { id: GameType.G2048, name: "2048", color: "from-yellow-400 to-orange-500", shadow: "shadow-orange-500/30", icon: Hash, desc: "数字合成" },
   { id: GameType.MINESWEEPER, name: "扫雷", color: "from-red-400 to-rose-600", shadow: "shadow-red-500/30", icon: Bomb, desc: "智力挑战" },
+  { id: GameType.TETRIS, name: "俄罗斯方块", color: "from-blue-500 to-blue-700", shadow: "shadow-blue-500/30", icon: LayoutGrid, desc: "方块消除" },
   { id: GameType.GOMOKU, name: "五子棋", color: "from-blue-400 to-indigo-600", shadow: "shadow-blue-500/30", icon: Grid3X3, desc: "博弈对战" },
   { id: GameType.PARKOUR, name: "跑酷", color: "from-orange-400 to-red-500", shadow: "shadow-orange-500/30", icon: Activity, desc: "敏捷反应" },
   { id: GameType.MATCH3, name: "消消乐", color: "from-purple-400 to-fuchsia-600", shadow: "shadow-purple-500/30", icon: Trophy, desc: "休闲解压" },

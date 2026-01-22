@@ -1,7 +1,8 @@
+
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context';
-import { Settings, Camera, Edit2, Medal, Lock, Zap, Book, Gamepad2, X, Save, User as UserIcon, Heart, Quote, Trash2, Activity, Calendar, BarChart2 } from 'lucide-react';
+import { Settings, Camera, Edit2, Medal, Lock, Zap, Book, Gamepad2, X, Save, User as UserIcon, Heart, Quote, Trash2, Activity, Calendar, BarChart2, ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import { ACHIEVEMENTS, INITIAL_QUOTES } from '../data';
 
 export const Profile = () => {
@@ -12,7 +13,12 @@ export const Profile = () => {
 
   // Edit Mode State
   const [isEditing, setIsEditing] = useState(false);
+  const [showCheckInCalendar, setShowCheckInCalendar] = useState(false);
   const [activeTab, setActiveTab] = useState<'achievements' | 'favorites'>('achievements');
+  
+  // View Date for Calendars
+  const [viewDate, setViewDate] = useState(new Date());
+  const [checkInViewDate, setCheckInViewDate] = useState(new Date());
   
   // Mood Chart State
   const [chartRange, setChartRange] = useState<'week' | 'month' | 'year'>('week');
@@ -66,17 +72,103 @@ export const Profile = () => {
   // Resolve favorite quotes
   const favoriteQuotes = INITIAL_QUOTES.filter(q => favorites.includes(q.id));
 
+  // --- CALENDAR LOGIC HELPER ---
+  const getCalendarMeta = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstDayOfMonth = new Date(year, month, 1).getDay();
+    return { year, month, daysInMonth, firstDayOfMonth };
+  };
+
+  // --- MOOD CALENDAR LOGIC ---
+  const handlePrevMonth = () => {
+    setViewDate(prev => {
+      const d = new Date(prev);
+      d.setMonth(d.getMonth() - 1);
+      return d;
+    });
+  };
+
+  const handleNextMonth = () => {
+    setViewDate(prev => {
+      const d = new Date(prev);
+      d.setMonth(d.getMonth() + 1);
+      return d;
+    });
+  };
+
+  const moodCalendarData = useMemo(() => {
+    const { year, month, daysInMonth, firstDayOfMonth } = getCalendarMeta(viewDate);
+    const dayMoods: Record<number, { sum: number, count: number }> = {};
+    
+    journal.forEach(entry => {
+      const d = new Date(entry.timestamp);
+      if (d.getFullYear() === year && d.getMonth() === month) {
+        const day = d.getDate();
+        if (!dayMoods[day]) dayMoods[day] = { sum: 0, count: 0 };
+        dayMoods[day].sum += entry.mood;
+        dayMoods[day].count += 1;
+      }
+    });
+
+    return { year, month, daysInMonth, firstDayOfMonth, dayMoods };
+  }, [journal, viewDate]);
+
+  // --- CHECK-IN CALENDAR LOGIC ---
+  const checkInCalendarData = useMemo(() => {
+    const { year, month, daysInMonth, firstDayOfMonth } = getCalendarMeta(checkInViewDate);
+    const history = user.stats.checkInHistory || [];
+    
+    const checkedDays = history.filter(dStr => {
+      const parts = dStr.split('/');
+      const y = parseInt(parts[0]);
+      const m = parseInt(parts[1]);
+      return y === year && (m - 1) === month;
+    }).map(dStr => parseInt(dStr.split('/')[2]));
+
+    return { year, month, daysInMonth, firstDayOfMonth, checkedDays };
+  }, [user.stats.checkInHistory, checkInViewDate]);
+
+  const handlePrevCheckInMonth = () => {
+    setCheckInViewDate(prev => {
+      const d = new Date(prev);
+      d.setMonth(d.getMonth() - 1);
+      return d;
+    });
+  };
+
+  const handleNextCheckInMonth = () => {
+    setCheckInViewDate(prev => {
+      const d = new Date(prev);
+      d.setMonth(d.getMonth() + 1);
+      return d;
+    });
+  };
+
+  const getMoodEmoji = (avg: number) => {
+    if (avg > 80) return '😆';
+    if (avg > 50) return '🙂';
+    if (avg > 0) return '😔';
+    return null;
+  };
+
+  const getMoodColor = (avg: number) => {
+    if (avg > 80) return 'bg-green-100 dark:bg-green-900/30 text-green-600';
+    if (avg > 50) return 'bg-blue-100 dark:bg-blue-900/30 text-blue-600';
+    if (avg > 0) return 'bg-orange-100 dark:bg-orange-900/30 text-orange-600';
+    return 'bg-gray-50 dark:bg-gray-800/50 text-gray-300';
+  };
+
   // --- MOOD CHART LOGIC ---
   const chartData = useMemo(() => {
     const now = new Date();
     const dataPoints: { label: string, value: number, date: string }[] = [];
     const count = chartRange === 'week' ? 7 : chartRange === 'month' ? 30 : 12;
 
-    // Helper to format date keys
-    const formatDateKey = (d: Date) => d.toLocaleDateString('zh-CN'); // YYYY/M/D
+    const formatDateKey = (d: Date) => d.toLocaleDateString('zh-CN');
     const formatMonthKey = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}`;
 
-    // 1. Prepare data structure based on range
     for (let i = count - 1; i >= 0; i--) {
       const d = new Date();
       let label = '';
@@ -95,8 +187,6 @@ export const Profile = () => {
       dataPoints.push({ label, value: 0, date: key });
     }
 
-    // 2. Aggregate journal data
-    // Map data points by date key for easier lookup
     const pointMap = new Map(); 
     dataPoints.forEach((p, index) => pointMap.set(p.date, { ...p, index, sum: 0, count: 0 }));
 
@@ -116,7 +206,6 @@ export const Profile = () => {
       }
     });
 
-    // 3. Calculate averages
     return dataPoints.map(p => {
         const mapData = pointMap.get(p.date);
         return {
@@ -126,7 +215,6 @@ export const Profile = () => {
     });
   }, [journal, chartRange]);
 
-  // --- SVG Chart Render Helper ---
   const renderChart = () => {
     if (!chartData || chartData.length === 0) return null;
 
@@ -136,17 +224,13 @@ export const Profile = () => {
     const availableWidth = width - padding * 2;
     const availableHeight = height - padding * 2;
 
-    // Calculate Coordinates
     const points = chartData.map((d, i) => {
         const x = padding + (i / (chartData.length - 1)) * availableWidth;
         const y = padding + availableHeight - (d.value / 100) * availableHeight;
         return { x, y, value: d.value, label: d.label };
     });
 
-    // Construct Path
     const pathD = points.map((p, i) => (i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`)).join(' ');
-    
-    // Area Path (for gradient fill)
     const areaD = `${pathD} L ${points[points.length-1].x} ${height} L ${points[0].x} ${height} Z`;
 
     return (
@@ -157,27 +241,16 @@ export const Profile = () => {
                     <stop offset="100%" stopColor="var(--primary-color)" stopOpacity="0" />
                 </linearGradient>
             </defs>
-
-            {/* Horizontal Grid Lines (0, 50, 100) */}
             <line x1={padding} y1={padding + availableHeight} x2={width - padding} y2={padding + availableHeight} stroke="gray" strokeOpacity="0.1" strokeDasharray="5,5" />
             <line x1={padding} y1={padding + availableHeight/2} x2={width - padding} y2={padding + availableHeight/2} stroke="gray" strokeOpacity="0.1" strokeDasharray="5,5" />
             <line x1={padding} y1={padding} x2={width - padding} y2={padding} stroke="gray" strokeOpacity="0.1" strokeDasharray="5,5" />
-
-            {/* Fill Area */}
             <path d={areaD} fill="url(#chartGradient)" />
-
-            {/* Line */}
             <path d={pathD} fill="none" stroke="var(--primary-color)" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
-
-            {/* Data Points and Labels */}
             {points.map((p, i) => (
                 <g key={i}>
-                    {/* Only show dots if value > 0 */}
                     {p.value > 0 && (
                         <circle cx={p.x} cy={p.y} r="8" fill="white" stroke="var(--primary-color)" strokeWidth="4" />
                     )}
-                    
-                    {/* X-Axis Labels: Show all for Week, fewer for Month */}
                     {(chartRange === 'week' || chartRange === 'year' || i % 5 === 0 || i === points.length - 1) && (
                         <text 
                             x={p.x} 
@@ -202,7 +275,6 @@ export const Profile = () => {
       {/* Glass Header */}
       <div className="relative h-64 overflow-hidden rounded-b-[3rem] shadow-2xl">
         <div className="absolute inset-0 bg-gradient-to-br from-primary via-red-400 to-orange-300 opacity-90"></div>
-        {/* Abstract shapes in header */}
         <div className="absolute top-[-50%] left-[-20%] w-[150%] h-[200%] bg-white/10 rotate-12 blur-3xl rounded-[40%]"></div>
         
         <div className="absolute top-0 w-full p-6 flex justify-end pt-8">
@@ -264,23 +336,112 @@ export const Profile = () => {
 
           {/* Stats Grid */}
           <div className="flex w-full justify-between gap-2">
-             <div className="flex-1 glass-card p-3 rounded-2xl flex flex-col items-center">
+             <button 
+                onClick={() => setShowCheckInCalendar(true)}
+                className="flex-1 glass-card p-3 rounded-2xl flex flex-col items-center active:scale-95 transition-transform"
+             >
                 <Zap size={18} className="text-yellow-500 mb-1" />
-                <span className="text-lg font-bold text-gray-800 dark:text-white">{user.stats.loginStreak}</span>
-                <span className="text-[10px] text-gray-400 font-bold uppercase">连续打卡</span>
-             </div>
-             <div className="flex-1 glass-card p-3 rounded-2xl flex flex-col items-center">
+                <span className="text-lg font-bold text-gray-800 dark:text-white">{user.stats.totalCheckIns}</span>
+                <span className="text-[10px] text-gray-400 font-bold uppercase">累计打卡</span>
+             </button>
+             <button 
+                onClick={() => navigate('/journal')}
+                className="flex-1 glass-card p-3 rounded-2xl flex flex-col items-center active:scale-95 transition-transform"
+             >
                 <Book size={18} className="text-blue-500 mb-1" />
                 <span className="text-lg font-bold text-gray-800 dark:text-white">{user.stats.totalJournalEntries}</span>
                 <span className="text-[10px] text-gray-400 font-bold uppercase">日记</span>
-             </div>
-             <div className="flex-1 glass-card p-3 rounded-2xl flex flex-col items-center">
+             </button>
+             <button 
+                onClick={() => navigate('/games')}
+                className="flex-1 glass-card p-3 rounded-2xl flex flex-col items-center active:scale-95 transition-transform"
+             >
                 <Gamepad2 size={18} className="text-green-500 mb-1" />
                 <span className="text-lg font-bold text-gray-800 dark:text-white">{user.stats.totalGamesPlayed}</span>
                 <span className="text-[10px] text-gray-400 font-bold uppercase">游戏</span>
-             </div>
+             </button>
           </div>
         </div>
+      </div>
+
+      {/* --- MOOD CALENDAR SECTION --- */}
+      <div className="px-6 mt-6 animate-fade-in" style={{ animationDelay: '50ms' }}>
+         <div className="glass-panel rounded-[2rem] p-5">
+            <div className="flex justify-between items-center mb-6">
+                <div className="flex items-center gap-2 text-gray-800 dark:text-white font-bold">
+                    <Calendar size={20} className="text-primary" />
+                    <span>心情日历</span>
+                </div>
+                
+                {/* Month Controller */}
+                <div className="flex items-center bg-gray-100 dark:bg-gray-700/50 rounded-xl px-2 py-1 gap-3">
+                    <button 
+                        onClick={handlePrevMonth}
+                        className="p-1 hover:text-primary transition-colors"
+                    >
+                        <ChevronLeft size={16} />
+                    </button>
+                    <span className="text-xs font-bold text-gray-700 dark:text-gray-200 min-w-[70px] text-center">
+                        {moodCalendarData.year}年{moodCalendarData.month + 1}月
+                    </span>
+                    <button 
+                        onClick={handleNextMonth}
+                        className="p-1 hover:text-primary transition-colors"
+                    >
+                        <ChevronRight size={16} />
+                    </button>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-7 gap-1 text-center">
+                {['日', '一', '二', '三', '四', '五', '六'].map(w => (
+                    <div key={w} className="text-[10px] font-bold text-gray-400 mb-2">{w}</div>
+                ))}
+                
+                {/* Empty slots for first week */}
+                {Array.from({ length: moodCalendarData.firstDayOfMonth }).map((_, i) => (
+                    <div key={`empty-${i}`} className="aspect-square"></div>
+                ))}
+
+                {/* Days of the month */}
+                {Array.from({ length: moodCalendarData.daysInMonth }).map((_, i) => {
+                    const day = i + 1;
+                    const mood = moodCalendarData.dayMoods[day];
+                    const avg = mood ? mood.sum / mood.count : 0;
+                    const emoji = getMoodEmoji(avg);
+
+                    return (
+                        <div key={day} className="flex flex-col items-center">
+                            <div 
+                                className={`w-full aspect-square rounded-xl flex items-center justify-center transition-all ${getMoodColor(avg)}`}
+                                title={mood ? `当日心情平均分: ${Math.round(avg)}` : '无记录'}
+                            >
+                                {emoji ? (
+                                    <span className="text-sm">{emoji}</span>
+                                ) : (
+                                    <span className="text-[10px] font-medium opacity-50">{day}</span>
+                                )}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+
+            <div className="mt-4 flex justify-center gap-4 border-t border-gray-100 dark:border-gray-800 pt-3">
+                <div className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-full bg-green-400"></div>
+                    <span className="text-[10px] text-gray-400 font-medium">优秀</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-full bg-blue-400"></div>
+                    <span className="text-[10px] text-gray-400 font-medium">良好</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-full bg-orange-400"></div>
+                    <span className="text-[10px] text-gray-400 font-medium">波动</span>
+                </div>
+            </div>
+         </div>
       </div>
 
       {/* --- MOOD CHART SECTION --- */}
@@ -405,6 +566,81 @@ export const Profile = () => {
           </div>
         )}
       </div>
+
+      {/* CHECK-IN CALENDAR MODAL */}
+      {showCheckInCalendar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/40 backdrop-blur-md animate-fade-in">
+           <div className="glass-panel w-full max-w-sm rounded-[2rem] p-6 shadow-2xl relative flex flex-col">
+              <button onClick={() => setShowCheckInCalendar(false)} className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors">
+                 <X size={24} />
+              </button>
+              
+              <div className="flex items-center gap-2 mb-6 text-gray-800 dark:text-white font-bold">
+                  <Zap size={22} className="text-yellow-500" />
+                  <span className="text-xl">累计打卡</span>
+              </div>
+
+              <div className="bg-gray-100 dark:bg-gray-800/50 p-4 rounded-2xl mb-6 flex justify-between items-center">
+                  <div>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">总计打卡</p>
+                    <p className="text-3xl font-black text-primary">{user.stats.totalCheckIns}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">当前连续</p>
+                    <p className="text-2xl font-black text-yellow-500">{user.stats.loginStreak}天</p>
+                  </div>
+              </div>
+
+              {/* Check-in Calendar Month Controller */}
+              <div className="flex justify-between items-center mb-6 px-1">
+                  <span className="text-sm font-bold text-gray-700 dark:text-gray-200">
+                    {checkInCalendarData.year}年{checkInCalendarData.month + 1}月
+                  </span>
+                  <div className="flex gap-2">
+                    <button onClick={handlePrevCheckInMonth} className="p-2 bg-gray-100 dark:bg-gray-700 rounded-xl hover:text-primary transition-colors active:scale-90">
+                      <ChevronLeft size={16} />
+                    </button>
+                    <button onClick={handleNextCheckInMonth} className="p-2 bg-gray-100 dark:bg-gray-700 rounded-xl hover:text-primary transition-colors active:scale-90">
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
+              </div>
+
+              <div className="grid grid-cols-7 gap-1 text-center mb-4">
+                  {['日', '一', '二', '三', '四', '五', '六'].map(w => (
+                      <div key={w} className="text-[10px] font-bold text-gray-400 mb-2">{w}</div>
+                  ))}
+                  {Array.from({ length: checkInCalendarData.firstDayOfMonth }).map((_, i) => (
+                      <div key={`empty-${i}`} className="aspect-square"></div>
+                  ))}
+                  {Array.from({ length: checkInCalendarData.daysInMonth }).map((_, i) => {
+                      const day = i + 1;
+                      const isChecked = checkInCalendarData.checkedDays.includes(day);
+                      return (
+                          <div key={day} className="aspect-square flex items-center justify-center">
+                              <div className={`
+                                w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold transition-all border
+                                ${isChecked 
+                                    ? 'bg-primary text-white border-primary shadow-lg shadow-primary/30 scale-110 z-10' 
+                                    : 'bg-slate-50 dark:bg-slate-800/50 text-slate-400 dark:text-slate-500 border-slate-100/50 dark:border-slate-700/30'
+                                }
+                              `}>
+                                 {isChecked ? <Check size={16} strokeWidth={4} /> : day}
+                              </div>
+                          </div>
+                      );
+                  })}
+              </div>
+
+              <button 
+                onClick={() => setShowCheckInCalendar(false)}
+                className="w-full bg-primary text-white py-3.5 rounded-xl font-bold shadow-lg shadow-primary/30 mt-2 active:scale-95 transition-transform"
+              >
+                我知道了
+              </button>
+           </div>
+        </div>
+      )}
 
       {/* EDIT MODAL */}
       {isEditing && (

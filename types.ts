@@ -1,3 +1,4 @@
+
 export interface Quote {
   id: number;
   content: string;
@@ -10,6 +11,7 @@ export interface JournalEntry {
   content: string;
   mood: number; // 1-100
   image?: string; // Base64 or URL
+  audio?: string; // Base64 audio data
   location?: string; // Geolocation string
   timestamp: number;
   dateStr: string; // YYYY-MM-DD
@@ -18,7 +20,8 @@ export interface JournalEntry {
 export interface UserStats {
   loginStreak: number;
   lastLoginDate: string;
-  totalCheckIns: number; // Added
+  checkInHistory: string[]; // 存储打卡日期的数组 YYYY/M/D
+  totalCheckIns: number;
   totalJournalEntries: number;
   totalQuotesLiked: number;
   totalGamesPlayed: number;
@@ -60,7 +63,8 @@ export enum GameType {
   PARKOUR = 'parkour',
   MATCH3 = 'match3',
   WOODEN_FISH = 'wooden-fish',
-  BUBBLE_WRAP = 'bubble-wrap'
+  BUBBLE_WRAP = 'bubble-wrap',
+  TETRIS = 'tetris'
 }
 
 export interface MeditationTrack {

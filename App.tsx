@@ -1,8 +1,8 @@
 
-import React, { useState } from 'react';
+import React from 'react';
 import { HashRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
-import { Home as HomeIcon, BookOpen, Gamepad2, User, ChevronLeft, Flower2 } from 'lucide-react';
-import { AppProvider, useApp } from './context';
+import { Home as HomeIcon, BookOpen, Gamepad2, User, Flower2 } from 'lucide-react';
+import { AppProvider } from './context';
 import { Home } from './pages/Home';
 import { Journal } from './pages/Journal';
 import { Games } from './pages/Games';
@@ -16,79 +16,64 @@ const DockItem = ({ icon: Icon, path, active }: { icon: any, path: string, activ
   return (
     <button
       onClick={() => navigate(path)}
-      className="group relative flex items-center justify-center w-12 h-full cursor-pointer touch-manipulation"
+      className="relative flex flex-col items-center justify-center flex-1 h-full cursor-pointer touch-manipulation transition-all duration-300"
     >
-      {/* Breathing Glow / Light Effect */}
+      {/* 选中时的光效 (Backlight Glow) */}
       <div 
         className={`
-          absolute bottom-4 w-10 h-10 rounded-full blur-xl
+          absolute inset-0 m-auto w-10 h-10 rounded-full blur-xl
           transition-all duration-700 ease-in-out pointer-events-none
-          ${active ? 'opacity-100 scale-150 animate-pulse' : 'opacity-0 scale-0'}
+          ${active ? 'opacity-60 scale-150 animate-pulse' : 'opacity-0 scale-0'}
         `}
-        style={{ backgroundColor: 'rgba(var(--primary-rgb), 0.4)' }}
+        style={{ backgroundColor: 'rgba(var(--primary-rgb), 0.5)' }}
       />
 
-      {/* Floating 3D Icon Container */}
+      {/* 图标容器 - 不再位移或突起 */}
       <div className={`
         relative z-10 flex items-center justify-center
-        w-14 h-14 rounded-2xl
-        transition-all duration-500 cubic-bezier(0.34, 1.56, 0.64, 1)
-        ${active
-          ? '-translate-y-6 bg-gradient-to-br from-white/95 to-white/50 dark:from-gray-700 dark:to-gray-900 border border-white/60 dark:border-white/20 shadow-[0_12px_24px_-8px_rgba(var(--primary-rgb),0.3)] scale-110'
-          : 'text-gray-400 dark:text-gray-500 hover:bg-white/10 active:scale-90 border border-transparent'}
+        transition-all duration-500
+        ${active ? 'text-primary scale-110' : 'text-gray-400 dark:text-gray-500'}
       `}>
          <Icon
-           size={26}
-           className={`
-             transition-all duration-500
-             ${active
-               ? 'text-primary drop-shadow-[0_2px_4px_rgba(var(--primary-rgb),0.3)]'
-               : 'opacity-70 group-hover:opacity-100 group-hover:text-gray-600 dark:group-hover:text-gray-300'}
-           `}
+           size={24}
            strokeWidth={active ? 2.5 : 2}
+           className="transition-all duration-300"
          />
-         
-         {/* Specular Highlight for Glass effect */}
-         {active && (
-            <div className="absolute inset-0 rounded-2xl bg-gradient-to-tr from-white/40 via-transparent to-transparent opacity-60 pointer-events-none" />
-         )}
       </div>
 
-      {/* Active Dot Indicator */}
+      {/* 底部指示光条 */}
       <div className={`
-        absolute bottom-2.5 w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_rgba(var(--primary-rgb),0.8)]
-        transition-all duration-500 delay-100
-        ${active ? 'opacity-100 scale-100' : 'opacity-0 scale-0 translate-y-4'}
+        absolute bottom-2 w-6 h-0.5 rounded-full bg-primary shadow-[0_0_8px_rgba(var(--primary-rgb),0.8)]
+        transition-all duration-500 ease-out
+        ${active ? 'opacity-100 scale-x-100' : 'opacity-0 scale-x-0'}
       `} />
     </button>
   );
 };
 
-// Fix for line 113: Making children optional in the prop type definition to satisfy TypeScript's JSX requirements
 const Layout = ({ children }: { children?: React.ReactNode }) => {
   const location = useLocation();
-  const isSubPage = location.pathname.includes('/game/') || location.pathname === '/settings' || location.pathname.includes('/journal/new');
+  // 判断是否为子页面（全屏页面）
+  const isSubPage = location.pathname.includes('/game/') || location.pathname === '/settings';
 
   return (
     <div className="flex flex-col h-full w-full overflow-hidden">
-      {/* Content Area */}
-      <main className={`flex-1 overflow-y-auto no-scrollbar ${isSubPage ? 'pb-0' : 'pb-24'}`}>
+      {/* 内容区域 */}
+      <main className={`flex-1 overflow-y-auto no-scrollbar ${isSubPage ? 'pb-0' : 'pb-16'}`}>
         <div className="min-h-full w-full">
           {children}
         </div>
       </main>
 
-      {/* Floating Glass Dock */}
+      {/* 底部通栏 Dock - 不再悬浮 */}
       {!isSubPage && (
-        <div className="fixed bottom-6 left-6 right-6 z-50 flex justify-center">
-          <nav className="glass-panel h-20 w-full max-w-lg rounded-[2rem] flex justify-between items-center px-8 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.15)] backdrop-blur-2xl bg-white/60 dark:bg-black/40 border border-white/50 dark:border-white/10 ring-1 ring-white/40 dark:ring-white/5 animate-fade-in">
-            <DockItem icon={HomeIcon} path="/" active={location.pathname === '/'} />
-            <DockItem icon={BookOpen} path="/journal" active={location.pathname === '/journal'} />
-            <DockItem icon={Flower2} path="/meditation" active={location.pathname === '/meditation'} />
-            <DockItem icon={Gamepad2} path="/games" active={location.pathname === '/games'} />
-            <DockItem icon={User} path="/profile" active={location.pathname === '/profile'} />
-          </nav>
-        </div>
+        <nav className="fixed bottom-0 left-0 right-0 z-50 h-16 w-full flex justify-around items-center px-4 backdrop-blur-2xl bg-white/70 dark:bg-black/60 border-t border-white/20 dark:border-white/5 animate-fade-in shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
+          <DockItem icon={HomeIcon} path="/" active={location.pathname === '/'} />
+          <DockItem icon={BookOpen} path="/journal" active={location.pathname === '/journal'} />
+          <DockItem icon={Flower2} path="/meditation" active={location.pathname === '/meditation'} />
+          <DockItem icon={Gamepad2} path="/games" active={location.pathname === '/games'} />
+          <DockItem icon={User} path="/profile" active={location.pathname === '/profile'} />
+        </nav>
       )}
     </div>
   );
